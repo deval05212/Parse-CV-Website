@@ -1,0 +1,5 @@
+gliner==0.2.26
+tqdm==4.67.3
+PyMuPDF==1.27.2.3
+pytesseract==0.3.13
+Pillow==12.2.0

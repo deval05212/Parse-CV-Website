@@ -1,0 +1,1715 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Resume PDF Parser</title>
+    <style>
+      :root {
+        --bg: #07111f;
+        --bg-soft: rgba(9, 22, 40, 0.74);
+        --panel: rgba(13, 27, 47, 0.88);
+        --panel-border: rgba(120, 167, 214, 0.18);
+        --text: #edf4ff;
+        --muted: #97abc9;
+        --accent: #5eead4;
+        --accent-strong: #14b8a6;
+        --warm: #f59e0b;
+        --danger: #fb7185;
+        --success: #34d399;
+        --shadow: 0 30px 90px rgba(0, 0, 0, 0.35);
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      body {
+        margin: 0;
+        min-height: 100vh;
+        font-family: "Segoe UI", Tahoma, Geneva, Verdana, sans-serif;
+        color: var(--text);
+        background:
+          radial-gradient(
+            circle at top left,
+            rgba(20, 184, 166, 0.18),
+            transparent 26%
+          ),
+          radial-gradient(
+            circle at top right,
+            rgba(245, 158, 11, 0.14),
+            transparent 24%
+          ),
+          linear-gradient(145deg, #030712 0%, #07111f 38%, #0d1b2f 100%);
+      }
+
+      body::before {
+        content: "";
+        position: fixed;
+        inset: 0;
+        background-image:
+          linear-gradient(rgba(148, 163, 184, 0.04) 1px, transparent 1px),
+          linear-gradient(90deg, rgba(148, 163, 184, 0.04) 1px, transparent 1px);
+        background-size: 28px 28px;
+        pointer-events: none;
+      }
+
+      .page {
+        position: relative;
+        z-index: 1;
+        width: min(1180px, calc(100% - 32px));
+        margin: 28px auto;
+      }
+
+      .hero {
+        display: grid;
+        grid-template-columns: 1.15fr 0.85fr;
+        gap: 24px;
+        align-items: stretch;
+      }
+
+      .card {
+        background: var(--bg-soft);
+        border: 1px solid var(--panel-border);
+        border-radius: 28px;
+        box-shadow: var(--shadow);
+        backdrop-filter: blur(18px);
+      }
+
+      .hero-copy,
+      .hero-side,
+      .results {
+        padding: 28px;
+      }
+
+      .eyebrow {
+        display: inline-flex;
+        align-items: center;
+        gap: 10px;
+        padding: 8px 12px;
+        border-radius: 999px;
+        background: rgba(94, 234, 212, 0.1);
+        color: var(--accent);
+        font-size: 0.84rem;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+      }
+
+      h1,
+      h2,
+      h3 {
+        margin: 0;
+        font-family: Georgia, "Times New Roman", serif;
+        font-weight: 700;
+      }
+
+      h1 {
+        margin-top: 18px;
+        font-size: clamp(2.3rem, 5vw, 4.4rem);
+        line-height: 0.95;
+      }
+
+      .lede {
+        margin: 18px 0 0;
+        max-width: 58ch;
+        color: var(--muted);
+        font-size: 1.05rem;
+        line-height: 1.75;
+      }
+
+      .process-list {
+        display: grid;
+        gap: 14px;
+        margin-top: 24px;
+      }
+
+      .process-item {
+        display: flex;
+        gap: 14px;
+        padding: 14px 16px;
+        border-radius: 18px;
+        background: rgba(7, 17, 31, 0.72);
+        border: 1px solid rgba(151, 171, 201, 0.12);
+      }
+
+      .process-number {
+        flex: 0 0 34px;
+        width: 34px;
+        height: 34px;
+        border-radius: 50%;
+        display: grid;
+        place-items: center;
+        background: rgba(245, 158, 11, 0.12);
+        color: var(--warm);
+        font-weight: 700;
+      }
+
+      .process-item p,
+      .process-item strong,
+      .metric-card p,
+      .metric-card strong,
+      .info-row span,
+      .status,
+      .empty-state,
+      .panel-copy {
+        margin: 0;
+      }
+
+      .process-item p,
+      .metric-card p,
+      .panel-copy,
+      .empty-state {
+        color: var(--muted);
+        line-height: 1.55;
+      }
+
+      .upload-shell {
+        margin-top: 26px;
+        padding: 22px;
+        border-radius: 26px;
+        background: var(--panel);
+        border: 1px solid rgba(94, 234, 212, 0.14);
+      }
+
+      .drop-zone {
+        position: relative;
+        padding: 34px 22px;
+        border-radius: 22px;
+        border: 1.5px dashed rgba(94, 234, 212, 0.34);
+        background:
+          linear-gradient(
+            180deg,
+            rgba(94, 234, 212, 0.08),
+            rgba(13, 27, 47, 0.5)
+          ),
+          rgba(7, 17, 31, 0.75);
+        cursor: pointer;
+        transition:
+          transform 0.2s ease,
+          border-color 0.2s ease,
+          background 0.2s ease;
+      }
+
+      .drop-zone:hover,
+      .drop-zone.active {
+        transform: translateY(-2px);
+        border-color: rgba(94, 234, 212, 0.72);
+        background:
+          linear-gradient(
+            180deg,
+            rgba(94, 234, 212, 0.12),
+            rgba(13, 27, 47, 0.56)
+          ),
+          rgba(7, 17, 31, 0.82);
+      }
+
+      .drop-icon {
+        width: 64px;
+        height: 64px;
+        margin-bottom: 18px;
+        color: var(--accent);
+      }
+
+      .drop-title {
+        font-size: 1.45rem;
+        margin-bottom: 10px;
+      }
+
+      .drop-note {
+        color: var(--muted);
+        max-width: 44ch;
+        margin: 0 auto;
+        line-height: 1.6;
+      }
+
+      .file-input {
+        display: none;
+      }
+
+      .button-row {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 12px;
+        margin-top: 20px;
+      }
+
+      button {
+        appearance: none;
+        border: 0;
+        border-radius: 14px;
+        padding: 12px 18px;
+        color: #04111f;
+        background: var(--accent);
+        font-size: 0.98rem;
+        font-weight: 700;
+        cursor: pointer;
+        transition:
+          transform 0.15s ease,
+          opacity 0.15s ease,
+          background 0.15s ease;
+      }
+
+      button:hover {
+        transform: translateY(-1px);
+      }
+
+      button:disabled {
+        cursor: not-allowed;
+        opacity: 0.55;
+        transform: none;
+      }
+
+      .button-secondary {
+        background: rgba(151, 171, 201, 0.14);
+        color: var(--text);
+        border: 1px solid rgba(151, 171, 201, 0.18);
+      }
+
+      .button-warm {
+        background: var(--warm);
+      }
+
+      .file-card {
+        display: none;
+        margin-top: 18px;
+        padding: 18px;
+        border-radius: 20px;
+        background: rgba(7, 17, 31, 0.8);
+        border: 1px solid rgba(151, 171, 201, 0.12);
+      }
+
+      .file-card.visible,
+      .results.visible {
+        display: block;
+      }
+
+      .info-grid,
+      .metrics-grid,
+      .result-grid {
+        display: grid;
+        gap: 16px;
+      }
+
+      .info-grid {
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+      }
+
+      .info-row {
+        padding: 14px;
+        border-radius: 16px;
+        background: rgba(13, 27, 47, 0.88);
+      }
+
+      .info-row strong {
+        display: block;
+        margin-bottom: 6px;
+        color: var(--accent);
+        font-size: 0.78rem;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+      }
+
+      .hero-side {
+        display: flex;
+        flex-direction: column;
+        justify-content: space-between;
+        gap: 18px;
+      }
+
+      .metrics-grid {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+      }
+
+      .metric-card {
+        padding: 18px;
+        border-radius: 20px;
+        background: rgba(7, 17, 31, 0.84);
+        border: 1px solid rgba(151, 171, 201, 0.12);
+      }
+
+      .metric-value {
+        display: block;
+        margin-top: 6px;
+        font-size: 1.9rem;
+        font-weight: 700;
+      }
+
+      .status {
+        min-height: 26px;
+        margin-top: 16px;
+        color: var(--muted);
+        font-weight: 600;
+      }
+
+      .status.error {
+        color: var(--danger);
+      }
+
+      .status.success {
+        color: var(--success);
+      }
+
+      .status.loading {
+        color: var(--warm);
+      }
+
+      .results {
+        display: none;
+        margin-top: 26px;
+      }
+
+      .results-head {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        justify-content: space-between;
+        gap: 14px;
+        margin-bottom: 22px;
+      }
+
+      .summary-grid {
+        display: grid;
+        grid-template-columns: repeat(4, minmax(0, 1fr));
+        gap: 14px;
+        margin-bottom: 18px;
+      }
+
+      .summary-card {
+        padding: 16px;
+        border-radius: 18px;
+        background: rgba(7, 17, 31, 0.82);
+        border: 1px solid rgba(151, 171, 201, 0.12);
+      }
+
+      .summary-card strong {
+        display: block;
+        color: var(--accent);
+        font-size: 0.76rem;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+        margin-bottom: 8px;
+      }
+
+      .result-grid {
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+      }
+
+      .structured-grid {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 16px;
+        margin-bottom: 18px;
+      }
+
+      .panel-span-full {
+        grid-column: 1 / -1;
+      }
+
+      .panel {
+        padding: 20px;
+        border-radius: 22px;
+        background: rgba(7, 17, 31, 0.82);
+        border: 1px solid rgba(151, 171, 201, 0.12);
+      }
+
+      .panel-head {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        gap: 10px;
+        margin-bottom: 10px;
+      }
+
+      .panel-actions {
+        display: flex;
+        gap: 10px;
+      }
+
+      .detail-list,
+      .additional-grid {
+        display: grid;
+        gap: 12px;
+      }
+
+      .detail-list {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+      }
+
+      .additional-grid {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+      }
+
+      .detail-card,
+      .stack-card {
+        padding: 14px;
+        border-radius: 16px;
+        background: rgba(2, 6, 23, 0.74);
+        border: 1px solid rgba(151, 171, 201, 0.1);
+      }
+
+      .detail-label,
+      .stack-meta-label {
+        display: block;
+        margin-bottom: 6px;
+        color: var(--accent);
+        font-size: 0.74rem;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+      }
+
+      .detail-value,
+      .stack-heading,
+      .stack-subheading,
+      .stack-meta-value {
+        margin: 0;
+        line-height: 1.55;
+        word-break: break-word;
+      }
+
+      .detail-value a,
+      .stack-meta-value a {
+        color: inherit;
+      }
+
+      .detail-value.preformatted,
+      .stack-meta-value.preformatted {
+        white-space: pre-wrap;
+        font-family:
+          "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace;
+        font-size: 0.85rem;
+      }
+
+      .chip-list,
+      .stack-list,
+      .stack-meta {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 10px;
+      }
+
+      .chip-list,
+      .stack-list {
+        align-items: flex-start;
+      }
+
+      .chip {
+        display: inline-flex;
+        align-items: center;
+        padding: 10px 12px;
+        border-radius: 999px;
+        background: rgba(94, 234, 212, 0.12);
+        border: 1px solid rgba(94, 234, 212, 0.18);
+        color: var(--text);
+        line-height: 1.2;
+      }
+
+      .stack-list {
+        flex-direction: column;
+      }
+
+      .stack-card {
+        width: 100%;
+      }
+
+      .stack-heading {
+        font-weight: 700;
+        font-size: 1rem;
+      }
+
+      .stack-subheading {
+        margin-top: 4px;
+        color: var(--muted);
+      }
+
+      .stack-meta {
+        margin-top: 12px;
+      }
+
+      .stack-meta-item {
+        min-width: 180px;
+        flex: 1 1 180px;
+      }
+
+      .panel-empty {
+        display: grid;
+        place-items: center;
+        min-height: 124px;
+        padding: 18px;
+        border-radius: 16px;
+        background: rgba(2, 6, 23, 0.5);
+        border: 1px dashed rgba(151, 171, 201, 0.2);
+        color: var(--muted);
+        text-align: center;
+        line-height: 1.6;
+      }
+
+      .results-divider {
+        margin: 10px 0 18px;
+      }
+
+      .mini-button {
+        padding: 9px 12px;
+        border-radius: 12px;
+        background: rgba(151, 171, 201, 0.12);
+        color: var(--text);
+        font-size: 0.86rem;
+      }
+
+      .output {
+        margin-top: 14px;
+        min-height: 360px;
+        max-height: 520px;
+        overflow: auto;
+        padding: 16px;
+        border-radius: 16px;
+        background: rgba(2, 6, 23, 0.84);
+        border: 1px solid rgba(151, 171, 201, 0.1);
+        color: #d8e6ff;
+        font-family:
+          "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace;
+        font-size: 0.92rem;
+        line-height: 1.6;
+        white-space: pre-wrap;
+        word-break: break-word;
+      }
+
+      .empty-state {
+        display: grid;
+        place-items: center;
+        min-height: 360px;
+        text-align: center;
+      }
+
+      @media (max-width: 1024px) {
+        .hero,
+        .result-grid,
+        .summary-grid,
+        .structured-grid {
+          grid-template-columns: 1fr;
+        }
+
+        .info-grid,
+        .metrics-grid {
+          grid-template-columns: repeat(2, minmax(0, 1fr));
+        }
+
+        .detail-list,
+        .additional-grid {
+          grid-template-columns: 1fr;
+        }
+      }
+
+      @media (max-width: 720px) {
+        .page {
+          width: min(100% - 20px, 100%);
+          margin: 14px auto 24px;
+        }
+
+        .hero-copy,
+        .hero-side,
+        .results {
+          padding: 20px;
+        }
+
+        .upload-shell {
+          padding: 16px;
+        }
+
+        .drop-zone {
+          padding: 24px 16px;
+        }
+
+        .info-grid,
+        .metrics-grid,
+        .detail-list,
+        .additional-grid {
+          grid-template-columns: 1fr;
+        }
+
+        .results-head,
+        .panel-head,
+        .button-row {
+          align-items: stretch;
+        }
+
+        button,
+        .mini-button {
+          width: 100%;
+        }
+
+        .panel-actions {
+          width: 100%;
+          flex-direction: column;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <main class="page">
+      <section class="hero">
+        <article class="card hero-copy">
+          <span class="eyebrow">Resume Parsing Studio</span>
+          <h1>Upload one PDF and turn it into usable JSON.</h1>
+          <p class="lede">
+            This page runs your full pipeline in one place: PDF upload,
+            extracted text, cleaned text, and final structured JSON for resume
+            data.
+          </p>
+
+          <div class="process-list">
+            <div class="process-item">
+              <div class="process-number">1</div>
+              <div>
+                <strong>Extract text from PDF</strong>
+                <p>
+                  Uses the existing PDF text extraction flow before any parsing
+                  starts.
+                </p>
+              </div>
+            </div>
+            <div class="process-item">
+              <div class="process-number">2</div>
+              <div>
+                <strong>Clean and normalize content</strong>
+                <p>
+                  Runs your cleaner so dates, contact info, and OCR noise are
+                  fixed first.
+                </p>
+              </div>
+            </div>
+            <div class="process-item">
+              <div class="process-number">3</div>
+              <div>
+                <strong>Convert into resume JSON</strong>
+                <p>
+                  Builds name, contact data, education, experience, and skills
+                  in one response.
+                </p>
+              </div>
+            </div>
+          </div>
+
+          <section class="upload-shell">
+            <div
+              id="dropZone"
+              class="drop-zone"
+              role="button"
+              tabindex="0"
+              aria-label="Upload PDF"
+            >
+              <svg
+                class="drop-icon"
+                viewBox="0 0 24 24"
+                fill="none"
+                aria-hidden="true"
+              >
+                <path
+                  d="M12 16V5m0 0l-4 4m4-4l4 4M5 16.5A3.5 3.5 0 018.5 13H9a5 5 0 019.8 1.3A3.4 3.4 0 0118 21H8a4 4 0 01-3-4.5z"
+                  stroke="currentColor"
+                  stroke-width="1.4"
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                />
+              </svg>
+              <h2 class="drop-title">Drop your resume PDF here</h2>
+              <p class="drop-note">
+                Click to browse or drag a PDF into this area. After upload, the
+                page will show the raw text, cleaned text, and parsed JSON
+                output.
+              </p>
+              <input
+                id="pdfInput"
+                class="file-input"
+                type="file"
+                accept="application/pdf,.pdf"
+              />
+            </div>
+
+            <div id="fileCard" class="file-card">
+              <div class="info-grid">
+                <div class="info-row">
+                  <strong>File Name</strong>
+                  <span id="fileName">-</span>
+                </div>
+                <div class="info-row">
+                  <strong>File Size</strong>
+                  <span id="fileSize">-</span>
+                </div>
+                <div class="info-row">
+                  <strong>File Type</strong>
+                  <span>PDF Document</span>
+                </div>
+              </div>
+            </div>
+
+            <div class="button-row">
+              <button id="browseBtn" type="button">Choose PDF</button>
+              <button id="parseBtn" class="button-warm" type="button" disabled>
+                Parse Resume
+              </button>
+              <button
+                id="removeBtn"
+                class="button-secondary"
+                type="button"
+                disabled
+              >
+                Remove File
+              </button>
+            </div>
+
+            <p id="status" class="status">Choose a PDF to begin.</p>
+          </section>
+        </article>
+
+        <aside class="card hero-side">
+          <div>
+            <span class="eyebrow">Live Output</span>
+            <h2 style="margin-top: 16px; font-size: 2rem">
+              What the website returns
+            </h2>
+            <p class="lede" style="margin-top: 12px">
+              The API sends back the extracted text, the cleaned text, and one
+              JSON object for the uploaded resume, so the browser can preview
+              everything immediately.
+            </p>
+          </div>
+
+          <div class="metrics-grid">
+            <div class="metric-card">
+              <p>Raw text</p>
+              <strong class="metric-value" id="rawCount">0</strong>
+            </div>
+            <div class="metric-card">
+              <p>Cleaned text</p>
+              <strong class="metric-value" id="cleanedCount">0</strong>
+            </div>
+            <div class="metric-card">
+              <p>Skills found</p>
+              <strong class="metric-value" id="skillsCount">0</strong>
+            </div>
+            <div class="metric-card">
+              <p>Experience rows</p>
+              <strong class="metric-value" id="experienceCount">0</strong>
+            </div>
+          </div>
+        </aside>
+      </section>
+
+      <section id="results" class="card results">
+        <div class="results-head">
+          <div>
+            <span class="eyebrow">Parsed Result</span>
+            <h2 style="margin-top: 16px; font-size: 2.2rem">
+              Review the full pipeline output
+            </h2>
+          </div>
+          <button
+            id="downloadJsonBtn"
+            class="button-secondary"
+            type="button"
+            disabled
+          >
+            Download JSON
+          </button>
+        </div>
+
+        <div class="summary-grid">
+          <div class="summary-card">
+            <strong>Candidate</strong>
+            <span id="summaryName">-</span>
+          </div>
+          <div class="summary-card">
+            <strong>Email</strong>
+            <span id="summaryEmail">-</span>
+          </div>
+          <div class="summary-card">
+            <strong>Phone</strong>
+            <span id="summaryPhone">-</span>
+          </div>
+          <div class="summary-card">
+            <strong>Location</strong>
+            <span id="summaryLocation">-</span>
+          </div>
+        </div>
+
+        <div class="structured-grid">
+          <article class="panel">
+            <div class="panel-head">
+              <div>
+                <h3>Candidate Details</h3>
+                <p class="panel-copy">
+                  Primary fields from the parsed resume response.
+                </p>
+              </div>
+            </div>
+            <div id="candidateFields" class="detail-list"></div>
+          </article>
+
+          <article class="panel">
+            <div class="panel-head">
+              <div>
+                <h3>Profiles & Links</h3>
+                <p class="panel-copy">
+                  Social and profile links found in the resume.
+                </p>
+              </div>
+            </div>
+            <div id="profileFields" class="detail-list"></div>
+          </article>
+
+          <article class="panel">
+            <div class="panel-head">
+              <div>
+                <h3>Skills</h3>
+                <p class="panel-copy">
+                  Detected skills rendered as separate items.
+                </p>
+              </div>
+            </div>
+            <div id="skillsSection" class="chip-list"></div>
+          </article>
+
+          <article class="panel">
+            <div class="panel-head">
+              <div>
+                <h3>Education</h3>
+                <p class="panel-copy">
+                  Degree and institution details from the parsed JSON.
+                </p>
+              </div>
+            </div>
+            <div id="educationSection" class="stack-list"></div>
+          </article>
+
+          <article class="panel">
+            <div class="panel-head">
+              <div>
+                <h3>Experience</h3>
+                <p class="panel-copy">Work history split into separate rows.</p>
+              </div>
+            </div>
+            <div id="experienceSection" class="stack-list"></div>
+          </article>
+
+          <article class="panel panel-span-full">
+            <div class="panel-head">
+              <div>
+                <h3>Additional Parsed Fields</h3>
+                <p class="panel-copy">
+                  Any remaining JSON fields that do not fit the main sections.
+                </p>
+              </div>
+            </div>
+            <div id="additionalFields" class="additional-grid"></div>
+          </article>
+        </div>
+
+        <div class="results-divider">
+          <span class="eyebrow">Pipeline Text & JSON</span>
+        </div>
+
+        <div class="result-grid">
+          <article class="panel">
+            <div class="panel-head">
+              <div>
+                <h3>Raw Extracted Text</h3>
+                <p class="panel-copy">
+                  Direct text pulled from the uploaded PDF.
+                </p>
+              </div>
+              <div class="panel-actions">
+                <button
+                  class="mini-button"
+                  type="button"
+                  data-copy-target="rawOutput"
+                >
+                  Copy
+                </button>
+              </div>
+            </div>
+            <pre id="rawOutput" class="output empty-state">
+No parsed result yet.</pre
+            >
+          </article>
+
+          <article class="panel">
+            <div class="panel-head">
+              <div>
+                <h3>Cleaned Text</h3>
+                <p class="panel-copy">
+                  Normalized output after your cleaning script runs.
+                </p>
+              </div>
+              <div class="panel-actions">
+                <button
+                  class="mini-button"
+                  type="button"
+                  data-copy-target="cleanedOutput"
+                >
+                  Copy
+                </button>
+              </div>
+            </div>
+            <pre id="cleanedOutput" class="output empty-state">
+No cleaned text yet.</pre
+            >
+          </article>
+
+          <article class="panel">
+            <div class="panel-head">
+              <div>
+                <h3>Parsed JSON</h3>
+                <p class="panel-copy">
+                  Structured resume data ready for downstream use.
+                </p>
+              </div>
+              <div class="panel-actions">
+                <button
+                  class="mini-button"
+                  type="button"
+                  data-copy-target="jsonOutput"
+                >
+                  Copy
+                </button>
+              </div>
+            </div>
+            <pre id="jsonOutput" class="output empty-state">
+No JSON response yet.</pre
+            >
+          </article>
+        </div>
+      </section>
+    </main>
+
+    <script>
+      const dropZone = document.getElementById("dropZone");
+      const pdfInput = document.getElementById("pdfInput");
+      const browseBtn = document.getElementById("browseBtn");
+      const parseBtn = document.getElementById("parseBtn");
+      const removeBtn = document.getElementById("removeBtn");
+      const fileCard = document.getElementById("fileCard");
+      const fileName = document.getElementById("fileName");
+      const fileSize = document.getElementById("fileSize");
+      const status = document.getElementById("status");
+      const results = document.getElementById("results");
+      const rawOutput = document.getElementById("rawOutput");
+      const cleanedOutput = document.getElementById("cleanedOutput");
+      const jsonOutput = document.getElementById("jsonOutput");
+      const downloadJsonBtn = document.getElementById("downloadJsonBtn");
+      const candidateFields = document.getElementById("candidateFields");
+      const profileFields = document.getElementById("profileFields");
+      const skillsSection = document.getElementById("skillsSection");
+      const educationSection = document.getElementById("educationSection");
+      const experienceSection = document.getElementById("experienceSection");
+      const additionalFields = document.getElementById("additionalFields");
+
+      const rawCount = document.getElementById("rawCount");
+      const cleanedCount = document.getElementById("cleanedCount");
+      const skillsCount = document.getElementById("skillsCount");
+      const experienceCount = document.getElementById("experienceCount");
+      const summaryName = document.getElementById("summaryName");
+      const summaryEmail = document.getElementById("summaryEmail");
+      const summaryPhone = document.getElementById("summaryPhone");
+      const summaryLocation = document.getElementById("summaryLocation");
+
+      const API_ENDPOINTS = getApiEndpoints();
+
+      let selectedFile = null;
+      let latestResult = null;
+
+      browseBtn.addEventListener("click", () => pdfInput.click());
+      dropZone.addEventListener("click", () => pdfInput.click());
+      dropZone.addEventListener("keydown", (event) => {
+        if (event.key === "Enter" || event.key === " ") {
+          event.preventDefault();
+          pdfInput.click();
+        }
+      });
+
+      pdfInput.addEventListener("change", (event) => {
+        handleFile(event.target.files[0]);
+      });
+
+      ["dragenter", "dragover"].forEach((eventName) => {
+        dropZone.addEventListener(eventName, (event) => {
+          event.preventDefault();
+          dropZone.classList.add("active");
+        });
+      });
+
+      ["dragleave", "dragend"].forEach((eventName) => {
+        dropZone.addEventListener(eventName, () => {
+          dropZone.classList.remove("active");
+        });
+      });
+
+      dropZone.addEventListener("drop", (event) => {
+        event.preventDefault();
+        dropZone.classList.remove("active");
+        handleFile(event.dataTransfer.files[0]);
+      });
+
+      parseBtn.addEventListener("click", async () => {
+        if (!selectedFile) {
+          setStatus("Choose a PDF first.", "error");
+          return;
+        }
+
+        parseBtn.disabled = true;
+        browseBtn.disabled = true;
+        removeBtn.disabled = true;
+        setStatus(
+          "Parsing PDF. This can take a little time while the model runs.",
+          "loading",
+        );
+
+        try {
+          const formData = new FormData();
+          formData.append("pdf", selectedFile);
+
+          const { response, data } = await requestParsedResume(formData);
+          if (!response.ok) {
+            throw new Error(
+              data.hint
+                ? `${data.error} ${data.hint}`
+                : data.error || "Failed to parse PDF.",
+            );
+          }
+
+          latestResult = data;
+          renderResult(data);
+          setStatus("Resume parsed successfully.", "success");
+        } catch (error) {
+          setStatus(getErrorMessage(error), "error");
+        } finally {
+          parseBtn.disabled = !selectedFile;
+          browseBtn.disabled = false;
+          removeBtn.disabled = !selectedFile;
+        }
+      });
+
+      removeBtn.addEventListener("click", () => {
+        selectedFile = null;
+        latestResult = null;
+        pdfInput.value = "";
+        fileCard.classList.remove("visible");
+        parseBtn.disabled = true;
+        removeBtn.disabled = true;
+        downloadJsonBtn.disabled = true;
+        results.classList.remove("visible");
+        resetOutputs();
+        setStatus("File removed. Choose another PDF when you are ready.", "");
+      });
+
+      downloadJsonBtn.addEventListener("click", () => {
+        if (!latestResult) {
+          return;
+        }
+
+        const blob = new Blob(
+          [JSON.stringify(latestResult.parsed_data, null, 2)],
+          {
+            type: "application/json",
+          },
+        );
+        const objectUrl = URL.createObjectURL(blob);
+        const link = document.createElement("a");
+        const fileBase = (latestResult.file_name || "resume").replace(
+          /\.pdf$/i,
+          "",
+        );
+        link.href = objectUrl;
+        link.download = `${fileBase}.json`;
+        link.click();
+        URL.revokeObjectURL(objectUrl);
+      });
+
+      document.querySelectorAll("[data-copy-target]").forEach((button) => {
+        button.addEventListener("click", async () => {
+          const target = document.getElementById(button.dataset.copyTarget);
+          const text = target.textContent.trim();
+
+          if (!text || text.startsWith("No ")) {
+            setStatus("There is no content to copy yet.", "error");
+            return;
+          }
+
+          try {
+            await navigator.clipboard.writeText(text);
+            setStatus("Copied to clipboard.", "success");
+          } catch (error) {
+            setStatus("Clipboard copy failed in this browser.", "error");
+          }
+        });
+      });
+
+      function handleFile(file) {
+        if (!file) {
+          return;
+        }
+
+        const isPdfType = file.type === "application/pdf";
+        const isPdfName = file.name.toLowerCase().endsWith(".pdf");
+        if (!isPdfType && !isPdfName) {
+          setStatus("Only PDF files are supported.", "error");
+          return;
+        }
+
+        selectedFile = file;
+        latestResult = null;
+        fileName.textContent = file.name;
+        fileSize.textContent = formatFileSize(file.size);
+        fileCard.classList.add("visible");
+        parseBtn.disabled = false;
+        removeBtn.disabled = false;
+        downloadJsonBtn.disabled = true;
+        results.classList.remove("visible");
+        resetOutputs();
+        setStatus(
+          "PDF selected. Click parse to run extraction, cleaning, and JSON conversion.",
+          "",
+        );
+      }
+
+      function renderResult(data) {
+        const parsedData = data.parsed_data || {};
+        const meta = data.meta || {};
+        const knownKeys = new Set([
+          "file_name",
+          "full_name",
+          "email",
+          "phone",
+          "location",
+          "linkedin",
+          "github",
+          "skills",
+          "education",
+          "experience",
+        ]);
+
+        rawOutput.textContent = data.raw_text || "";
+        cleanedOutput.textContent = data.cleaned_text || "";
+        jsonOutput.textContent = JSON.stringify(parsedData, null, 2);
+
+        rawOutput.classList.remove("empty-state");
+        cleanedOutput.classList.remove("empty-state");
+        jsonOutput.classList.remove("empty-state");
+
+        rawCount.textContent = meta.raw_characters || 0;
+        cleanedCount.textContent = meta.cleaned_characters || 0;
+        skillsCount.textContent = meta.skills_count || 0;
+        experienceCount.textContent = meta.experience_count || 0;
+
+        summaryName.textContent = parsedData.full_name || "Not found";
+        summaryEmail.textContent = parsedData.email || "Not found";
+        summaryPhone.textContent = parsedData.phone || "Not found";
+        summaryLocation.textContent = parsedData.location || "Not found";
+
+        renderDetailList(
+          candidateFields,
+          [
+            {
+              label: "File Name",
+              value: parsedData.file_name || data.file_name || "",
+            },
+            { label: "Full Name", value: parsedData.full_name || "" },
+            { label: "Email", value: parsedData.email || "" },
+            { label: "Phone", value: parsedData.phone || "" },
+            { label: "Location", value: parsedData.location || "" },
+          ],
+          "No candidate details found.",
+        );
+
+        renderDetailList(
+          profileFields,
+          [
+            { label: "LinkedIn", value: parsedData.linkedin || "" },
+            { label: "GitHub", value: parsedData.github || "" },
+          ],
+          "No profile links found.",
+        );
+
+        renderChipList(
+          skillsSection,
+          parsedData.skills || [],
+          "No skills found.",
+        );
+
+        renderObjectList(educationSection, parsedData.education || [], {
+          titleKeys: ["degree_or_board", "degree", "course", "qualification"],
+          subtitleKeys: [
+            "university_or_school",
+            "institution",
+            "school",
+            "college",
+            "university",
+          ],
+          fallbackTitle: "Education Entry",
+          emptyMessage: "No education details found.",
+        });
+
+        renderObjectList(experienceSection, parsedData.experience || [], {
+          titleKeys: ["role", "title", "job_title", "position"],
+          subtitleKeys: ["company", "organization", "employer"],
+          fallbackTitle: "Experience Entry",
+          emptyMessage: "No experience details found.",
+        });
+
+        renderAdditionalFields(
+          additionalFields,
+          Object.entries(parsedData).filter(
+            ([key, value]) => !knownKeys.has(key) && hasDisplayValue(value),
+          ),
+        );
+
+        downloadJsonBtn.disabled = false;
+        results.classList.add("visible");
+      }
+
+      function resetOutputs() {
+        rawOutput.textContent = "No parsed result yet.";
+        cleanedOutput.textContent = "No cleaned text yet.";
+        jsonOutput.textContent = "No JSON response yet.";
+
+        rawOutput.classList.add("empty-state");
+        cleanedOutput.classList.add("empty-state");
+        jsonOutput.classList.add("empty-state");
+
+        rawCount.textContent = "0";
+        cleanedCount.textContent = "0";
+        skillsCount.textContent = "0";
+        experienceCount.textContent = "0";
+
+        summaryName.textContent = "-";
+        summaryEmail.textContent = "-";
+        summaryPhone.textContent = "-";
+        summaryLocation.textContent = "-";
+
+        renderDetailList(candidateFields, [], "No candidate details found.");
+        renderDetailList(profileFields, [], "No profile links found.");
+        renderChipList(skillsSection, [], "No skills found.");
+        renderObjectList(educationSection, [], {
+          titleKeys: ["degree_or_board"],
+          subtitleKeys: ["university_or_school"],
+          fallbackTitle: "Education Entry",
+          emptyMessage: "No education details found.",
+        });
+        renderObjectList(experienceSection, [], {
+          titleKeys: ["role"],
+          subtitleKeys: ["company"],
+          fallbackTitle: "Experience Entry",
+          emptyMessage: "No experience details found.",
+        });
+        renderAdditionalFields(additionalFields, []);
+      }
+
+      function renderDetailList(target, entries, emptyMessage) {
+        target.replaceChildren();
+
+        const validEntries = entries.filter((entry) =>
+          hasDisplayValue(entry.value),
+        );
+        if (!validEntries.length) {
+          appendEmptyState(target, emptyMessage);
+          return;
+        }
+
+        validEntries.forEach((entry) => {
+          const card = document.createElement("div");
+          card.className = "detail-card";
+
+          const label = document.createElement("span");
+          label.className = "detail-label";
+          label.textContent = entry.label;
+
+          const value = createValueNode(
+            entry.label,
+            entry.value,
+            "detail-value",
+          );
+
+          card.append(label, value);
+          target.append(card);
+        });
+      }
+
+      function renderChipList(target, items, emptyMessage) {
+        target.replaceChildren();
+
+        const validItems = items
+          .map((item) => formatValueForDisplay(item))
+          .filter((item) => item && item.trim());
+
+        if (!validItems.length) {
+          appendEmptyState(target, emptyMessage);
+          return;
+        }
+
+        validItems.forEach((item) => {
+          const chip = document.createElement("span");
+          chip.className = "chip";
+          chip.textContent = item;
+          target.append(chip);
+        });
+      }
+
+      function renderObjectList(target, entries, options) {
+        target.replaceChildren();
+
+        const validEntries = Array.isArray(entries)
+          ? entries.filter((entry) => hasDisplayValue(entry))
+          : [];
+        if (!validEntries.length) {
+          appendEmptyState(target, options.emptyMessage);
+          return;
+        }
+
+        validEntries.forEach((entry) => {
+          const card = document.createElement("article");
+          card.className = "stack-card";
+
+          if (entry && typeof entry === "object" && !Array.isArray(entry)) {
+            const title =
+              findFirstValue(entry, options.titleKeys) || options.fallbackTitle;
+            const subtitle = findFirstValue(entry, options.subtitleKeys);
+
+            const heading = document.createElement("p");
+            heading.className = "stack-heading";
+            heading.textContent = title;
+            card.append(heading);
+
+            if (subtitle && subtitle !== title) {
+              const subheading = document.createElement("p");
+              subheading.className = "stack-subheading";
+              subheading.textContent = subtitle;
+              card.append(subheading);
+            }
+
+            const metaEntries = Object.entries(entry).filter(([key, value]) => {
+              if (!hasDisplayValue(value)) {
+                return false;
+              }
+
+              return (
+                !options.titleKeys.includes(key) &&
+                !options.subtitleKeys.includes(key)
+              );
+            });
+
+            if (metaEntries.length) {
+              const metaWrap = document.createElement("div");
+              metaWrap.className = "stack-meta";
+
+              metaEntries.forEach(([key, value]) => {
+                const metaItem = document.createElement("div");
+                metaItem.className = "stack-meta-item";
+
+                const metaLabel = document.createElement("span");
+                metaLabel.className = "stack-meta-label";
+                metaLabel.textContent = formatKeyLabel(key);
+
+                const metaValue = createValueNode(
+                  formatKeyLabel(key),
+                  value,
+                  "stack-meta-value",
+                );
+
+                metaItem.append(metaLabel, metaValue);
+                metaWrap.append(metaItem);
+              });
+
+              card.append(metaWrap);
+            }
+          } else {
+            const heading = document.createElement("p");
+            heading.className = "stack-heading";
+            heading.textContent = formatValueForDisplay(entry);
+            card.append(heading);
+          }
+
+          target.append(card);
+        });
+      }
+
+      function renderAdditionalFields(target, entries) {
+        target.replaceChildren();
+
+        if (!entries.length) {
+          appendEmptyState(target, "No extra parsed fields found.");
+          return;
+        }
+
+        entries.forEach(([key, value]) => {
+          const card = document.createElement("div");
+          card.className = "detail-card";
+
+          const label = document.createElement("span");
+          label.className = "detail-label";
+          label.textContent = formatKeyLabel(key);
+
+          const valueNode = createValueNode(
+            formatKeyLabel(key),
+            value,
+            "detail-value",
+          );
+
+          card.append(label, valueNode);
+          target.append(card);
+        });
+      }
+
+      function appendEmptyState(target, message) {
+        const empty = document.createElement("div");
+        empty.className = "panel-empty";
+        empty.textContent = message;
+        target.append(empty);
+      }
+
+      function createValueNode(label, value, className) {
+        const displayValue = formatValueForDisplay(value);
+        const lowerLabel = String(label || "").toLowerCase();
+
+        if (!displayValue) {
+          const empty = document.createElement("p");
+          empty.className = className;
+          empty.textContent = "Not found";
+          return empty;
+        }
+
+        if (isLikelyUrl(displayValue)) {
+          const wrapper = document.createElement("p");
+          wrapper.className = className;
+
+          const link = document.createElement("a");
+          link.href = displayValue.startsWith("http")
+            ? displayValue
+            : `https://${displayValue}`;
+          link.target = "_blank";
+          link.rel = "noreferrer";
+          link.textContent = displayValue;
+
+          wrapper.append(link);
+          return wrapper;
+        }
+
+        if (lowerLabel.includes("email") && typeof displayValue === "string") {
+          const wrapper = document.createElement("p");
+          wrapper.className = className;
+
+          const link = document.createElement("a");
+          link.href = `mailto:${displayValue}`;
+          link.textContent = displayValue;
+
+          wrapper.append(link);
+          return wrapper;
+        }
+
+        if (lowerLabel.includes("phone") && typeof displayValue === "string") {
+          const wrapper = document.createElement("p");
+          wrapper.className = className;
+
+          const link = document.createElement("a");
+          link.href = `tel:${displayValue.replace(/\s+/g, "")}`;
+          link.textContent = displayValue;
+
+          wrapper.append(link);
+          return wrapper;
+        }
+
+        const valueNode = document.createElement("p");
+        valueNode.className = className;
+        valueNode.textContent = displayValue;
+
+        if (needsPreformattedDisplay(value)) {
+          valueNode.classList.add("preformatted");
+        }
+
+        return valueNode;
+      }
+
+      function findFirstValue(source, keys) {
+        for (const key of keys) {
+          if (hasDisplayValue(source[key])) {
+            return formatValueForDisplay(source[key]);
+          }
+        }
+
+        return "";
+      }
+
+      function hasDisplayValue(value) {
+        if (value === null || value === undefined) {
+          return false;
+        }
+
+        if (typeof value === "string") {
+          return Boolean(value.trim());
+        }
+
+        if (Array.isArray(value)) {
+          return value.some((item) => hasDisplayValue(item));
+        }
+
+        if (typeof value === "object") {
+          return Object.values(value).some((item) => hasDisplayValue(item));
+        }
+
+        return true;
+      }
+
+      function formatValueForDisplay(value) {
+        if (value === null || value === undefined) {
+          return "";
+        }
+
+        if (typeof value === "string") {
+          return value.trim();
+        }
+
+        if (Array.isArray(value)) {
+          if (!value.length) {
+            return "";
+          }
+
+          const hasObjects = value.some(
+            (item) => item && typeof item === "object",
+          );
+          if (hasObjects) {
+            return JSON.stringify(value, null, 2);
+          }
+
+          return value
+            .map((item) => String(item).trim())
+            .filter(Boolean)
+            .join(", ");
+        }
+
+        if (typeof value === "object") {
+          return JSON.stringify(value, null, 2);
+        }
+
+        return String(value);
+      }
+
+      function formatKeyLabel(key) {
+        return String(key || "")
+          .replace(/_/g, " ")
+          .replace(/\b\w/g, (char) => char.toUpperCase());
+      }
+
+      function isLikelyUrl(value) {
+        return /^(https?:\/\/|www\.)/i.test(value);
+      }
+
+      function needsPreformattedDisplay(value) {
+        return Array.isArray(value) || (value && typeof value === "object");
+      }
+
+      function setStatus(message, tone) {
+        status.textContent = message;
+        status.className = "status";
+        if (tone) {
+          status.classList.add(tone);
+        }
+      }
+
+      function getApiEndpoints() {
+        const endpoints = [];
+
+        if (
+          window.location.protocol === "http:" ||
+          window.location.protocol === "https:"
+        ) {
+          endpoints.push(`${window.location.origin}/api/parse-pdf`);
+        }
+
+        const protocol =
+          window.location.protocol === "https:" ? "https:" : "http:";
+        const hosts = new Set([
+          window.location.hostname || "127.0.0.1",
+          "127.0.0.1",
+          "localhost",
+        ]);
+
+        hosts.forEach((host) => {
+          endpoints.push(`${protocol}//${host}:8000/api/parse-pdf`);
+        });
+
+        return [...new Set(endpoints)];
+      }
+
+      async function requestParsedResume(formData) {
+        let lastError = null;
+
+        for (const endpoint of API_ENDPOINTS) {
+          try {
+            const response = await fetch(endpoint, {
+              method: "POST",
+              body: formData,
+            });
+            const data = await readApiResponse(response);
+            return { response, data };
+          } catch (error) {
+            if (error && !error.allowFallback) {
+              throw error;
+            }
+
+            lastError = error;
+          }
+        }
+
+        if (
+          lastError &&
+          lastError.message &&
+          lastError.message !== "Failed to fetch"
+        ) {
+          throw lastError;
+        }
+
+        throw new Error(
+          "Backend not reachable. Start `python3 main.py` and open `http://127.0.0.1:8000/`.",
+        );
+      }
+
+      async function readApiResponse(response) {
+        const responseText = await response.text();
+
+        if (!responseText.trim()) {
+          const error = new Error(
+            "The parser API returned an empty response. Open the app from `http://127.0.0.1:8000/`.",
+          );
+          error.allowFallback = true;
+          throw error;
+        }
+
+        try {
+          return JSON.parse(responseText);
+        } catch (parseError) {
+          const error = new Error(
+            "The parser response was not valid JSON. Open the app from `http://127.0.0.1:8000/`.",
+          );
+          error.allowFallback = true;
+          throw error;
+        }
+      }
+
+      function getErrorMessage(error) {
+        if (
+          error &&
+          typeof error.message === "string" &&
+          error.message.trim()
+        ) {
+          return error.message;
+        }
+
+        return "Something went wrong while parsing the PDF.";
+      }
+
+      function formatFileSize(bytes) {
+        if (bytes < 1024) return `${bytes} B`;
+        if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(2)} KB`;
+        return `${(bytes / (1024 * 1024)).toFixed(2)} MB`;
+      }
+    </script>
+  </body>
+</html>
