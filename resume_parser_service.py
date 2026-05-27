@@ -6,7 +6,9 @@ from typing import Any, Dict
 
 from clean_resumes import clean_text
 from pipeline import (
+    CertificationsExtractor,
     ExperienceExtractor,
+    ProjectsExtractor,
     SkillsExtractor,
     extract_basic_infos,
     extract_education,
@@ -54,6 +56,8 @@ def _load_pipeline() -> Dict[str, Any]:
         "model": model,
         "skills_extractor": SkillsExtractor(model),
         "experience_extractor": ExperienceExtractor(model),
+        "certifications_extractor": CertificationsExtractor(),
+        "projects_extractor": ProjectsExtractor(),
     }
 
 
@@ -91,12 +95,17 @@ def _parse_cleaned_resume(cleaned_text: str, filename: str, threshold: float) ->
         if job.get("company") or job.get("role")
     ]
 
+    certifications = pipeline["certifications_extractor"].extract(cleaned_text)
+    projects = pipeline["projects_extractor"].extract(cleaned_text)
+
     return {
         "file_name": filename,
         **basic_info,
         "education": education_data.get("education", []),
         "experience": experience,
         "skills": skills,
+        "certifications": certifications,
+        "projects": projects,
     }
 
 
@@ -134,5 +143,7 @@ def parse_resume_bytes(
             "skills_count": len(parsed_data.get("skills", [])),
             "education_count": len(parsed_data.get("education", [])),
             "experience_count": len(parsed_data.get("experience", [])),
+            "certifications_count": len(parsed_data.get("certifications", [])),
+            "projects_count": len(parsed_data.get("projects", [])),
         },
     }

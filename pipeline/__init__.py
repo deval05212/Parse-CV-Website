@@ -2,7 +2,17 @@ from .basic_info_extractor import extract_basic_infos, extract_name_from_filenam
 from .skills_extractor import SkillsExtractor
 from .education_extractor import extract_education
 from .experience_extractor import ExperienceExtractor
+from .certifications_extractor import CertificationsExtractor
+from .projects_extractor import ProjectsExtractor
 
-__all__ = ["extract_basic_infos", "extract_name_from_filename", "SkillsExtractor", "extract_education", "ExperienceExtractor"]
+__all__ = [
+    "extract_basic_infos",
+    "extract_name_from_filename",
+    "SkillsExtractor",
+    "extract_education",
+    "ExperienceExtractor",
+    "CertificationsExtractor",
+    "ProjectsExtractor",
+]
 
 

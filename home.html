@@ -371,7 +371,7 @@
       }
 
       .metrics-grid {
-        grid-template-columns: repeat(2, minmax(0, 1fr));
+        grid-template-columns: repeat(3, minmax(0, 1fr));
       }
 
       .metric-card {
@@ -423,7 +423,7 @@
 
       .summary-grid {
         display: grid;
-        grid-template-columns: repeat(5, minmax(0, 1fr));
+        grid-template-columns: repeat(7, minmax(0, 1fr));
         gap: 14px;
         margin-bottom: 18px;
       }
@@ -845,6 +845,14 @@
               <p>Experience rows</p>
               <strong class="metric-value" id="experienceCount">0</strong>
             </div>
+            <div class="metric-card">
+              <p>Certifications</p>
+              <strong class="metric-value" id="certificationsCount">0</strong>
+            </div>
+            <div class="metric-card">
+              <p>Projects</p>
+              <strong class="metric-value" id="projectsCount">0</strong>
+            </div>
           </div>
         </aside>
       </section>
@@ -947,6 +955,30 @@
               </div>
             </div>
             <div id="experienceSection" class="stack-list"></div>
+          </article>
+
+          <article class="panel">
+            <div class="panel-head">
+              <div>
+                <h3>Certifications</h3>
+                <p class="panel-copy">
+                  Certificates and credentials extracted from the resume.
+                </p>
+              </div>
+            </div>
+            <div id="certificationsSection" class="stack-list"></div>
+          </article>
+
+          <article class="panel panel-span-full">
+            <div class="panel-head">
+              <div>
+                <h3>Projects</h3>
+                <p class="panel-copy">
+                  Personal and academic projects with tech stacks.
+                </p>
+              </div>
+            </div>
+            <div id="projectsSection" class="stack-list"></div>
           </article>
 
           <article class="panel panel-span-full">
@@ -1060,12 +1092,16 @@ No JSON response yet.</pre
       const skillsSection = document.getElementById("skillsSection");
       const educationSection = document.getElementById("educationSection");
       const experienceSection = document.getElementById("experienceSection");
+      const certificationsSection = document.getElementById("certificationsSection");
+      const projectsSection = document.getElementById("projectsSection");
       const additionalFields = document.getElementById("additionalFields");
 
       const rawCount = document.getElementById("rawCount");
       const cleanedCount = document.getElementById("cleanedCount");
       const skillsCount = document.getElementById("skillsCount");
       const experienceCount = document.getElementById("experienceCount");
+      const certificationsCount = document.getElementById("certificationsCount");
+      const projectsCount = document.getElementById("projectsCount");
       const summaryName = document.getElementById("summaryName");
       const summaryRole = document.getElementById("summaryRole");
       const summaryEmail = document.getElementById("summaryEmail");
@@ -1248,6 +1284,8 @@ No JSON response yet.</pre
           "skills",
           "education",
           "experience",
+          "certifications",
+          "projects",
         ]);
 
         rawOutput.textContent = data.raw_text || "";
@@ -1262,6 +1300,8 @@ No JSON response yet.</pre
         cleanedCount.textContent = meta.cleaned_characters || 0;
         skillsCount.textContent = meta.skills_count || 0;
         experienceCount.textContent = meta.experience_count || 0;
+        certificationsCount.textContent = meta.certifications_count || 0;
+        projectsCount.textContent = meta.projects_count || 0;
 
         summaryName.textContent = parsedData.full_name || "Not found";
         summaryRole.textContent = parsedData.job_role || "Not found";
@@ -1320,6 +1360,19 @@ No JSON response yet.</pre
           emptyMessage: "No experience details found.",
         });
 
+        renderObjectList(certificationsSection, parsedData.certifications || [], {
+          titleKeys: ["certification_name"],
+          subtitleKeys: ["issuing_organization"],
+          fallbackTitle: "Certification",
+          emptyMessage: "No certifications found.",
+        });
+
+        renderProjectsList(
+          projectsSection,
+          parsedData.projects || [],
+          "No projects found.",
+        );
+
         renderAdditionalFields(
           additionalFields,
           Object.entries(parsedData).filter(
@@ -1345,6 +1398,8 @@ No JSON response yet.</pre
         cleanedCount.textContent = "0";
         skillsCount.textContent = "0";
         experienceCount.textContent = "0";
+        certificationsCount.textContent = "0";
+        projectsCount.textContent = "0";
 
         summaryName.textContent = "-";
         summaryRole.textContent = "-";
@@ -1367,6 +1422,13 @@ No JSON response yet.</pre
           fallbackTitle: "Experience Entry",
           emptyMessage: "No experience details found.",
         });
+        renderObjectList(certificationsSection, [], {
+          titleKeys: ["certification_name"],
+          subtitleKeys: ["issuing_organization"],
+          fallbackTitle: "Certification",
+          emptyMessage: "No certifications found.",
+        });
+        renderProjectsList(projectsSection, [], "No projects found.");
         renderAdditionalFields(additionalFields, []);
       }
 
@@ -1492,6 +1554,57 @@ No JSON response yet.</pre
             heading.className = "stack-heading";
             heading.textContent = formatValueForDisplay(entry);
             card.append(heading);
+          }
+
+          target.append(card);
+        });
+      }
+
+      function renderProjectsList(target, entries, emptyMessage) {
+        target.replaceChildren();
+
+        const validEntries = Array.isArray(entries)
+          ? entries.filter((e) => hasDisplayValue(e))
+          : [];
+
+        if (!validEntries.length) {
+          appendEmptyState(target, emptyMessage);
+          return;
+        }
+
+        validEntries.forEach((entry) => {
+          const card = document.createElement("article");
+          card.className = "stack-card";
+
+          const heading = document.createElement("p");
+          heading.className = "stack-heading";
+          heading.textContent = entry.project_name || "Project";
+          card.append(heading);
+
+          if (entry.description && entry.description.trim()) {
+            const desc = document.createElement("p");
+            desc.className = "stack-subheading";
+            desc.style.marginTop = "6px";
+            desc.textContent = entry.description;
+            card.append(desc);
+          }
+
+          const techs = Array.isArray(entry.technologies)
+            ? entry.technologies.filter(Boolean)
+            : [];
+          if (techs.length) {
+            const techWrap = document.createElement("div");
+            techWrap.className = "chip-list";
+            techWrap.style.marginTop = "12px";
+            techs.forEach((tech) => {
+              const chip = document.createElement("span");
+              chip.className = "chip";
+              chip.style.fontSize = "0.82rem";
+              chip.style.padding = "6px 10px";
+              chip.textContent = tech;
+              techWrap.append(chip);
+            });
+            card.append(techWrap);
           }
 
           target.append(card);
