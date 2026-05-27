@@ -35,6 +35,7 @@ def _ensure_pdf_dependencies() -> Any:
 
 def _ensure_gliner() -> Any:
     try:
+        # pyrefly: ignore [missing-import]
         from gliner import GLiNER
     except ImportError as exc:
         raise DependencyError(
@@ -83,6 +84,8 @@ def _parse_cleaned_resume(cleaned_text: str, filename: str, threshold: float) ->
         {
             "company": job.get("company", ""),
             "role": job.get("role", ""),
+            "start_date": job.get("start_date", ""),
+            "end_date": job.get("end_date", ""),
         }
         for job in raw_experience
         if job.get("company") or job.get("role")

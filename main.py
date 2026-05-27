@@ -1,6 +1,7 @@
 import argparse
-import cgi
 import json
+from email.parser import BytesParser
+from email.policy import default as email_policy
 from http import HTTPStatus
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
@@ -11,8 +12,8 @@ from resume_parser_service import DependencyError, parse_resume_bytes
 
 BASE_DIR = Path(__file__).resolve().parent
 HOME_PAGE = BASE_DIR / "home.html"
-DEFAULT_HOST = "127.0.0.1"
-DEFAULT_PORT = 8000
+DEFAULT_HOST = "0.0.0.0"
+DEFAULT_PORT = 5200
 
 
 class ResumeAPIHandler(BaseHTTPRequestHandler):
@@ -50,23 +51,15 @@ class ResumeAPIHandler(BaseHTTPRequestHandler):
             return
 
         try:
-            form = cgi.FieldStorage(
-                fp=self.rfile,
-                headers=self.headers,
-                environ={
-                    "REQUEST_METHOD": "POST",
-                    "CONTENT_TYPE": self.headers.get("Content-Type", ""),
-                },
-            )
-        except ValueError:
+            filename, content_type, file_bytes = self._read_uploaded_pdf()
+        except ValueError as exc:
             self._send_json(
-                {"error": "Invalid multipart form submission."},
+                {"error": str(exc)},
                 status=HTTPStatus.BAD_REQUEST,
             )
             return
 
-        file_item = form["pdf"] if "pdf" in form else None
-        if file_item is None or not getattr(file_item, "filename", ""):
+        if not filename:
             self._send_json(
                 {"error": "Please choose a PDF file before parsing."},
                 status=HTTPStatus.BAD_REQUEST,
@@ -75,9 +68,9 @@ class ResumeAPIHandler(BaseHTTPRequestHandler):
 
         try:
             result = parse_resume_bytes(
-                file_bytes=file_item.file.read(),
-                filename=file_item.filename,
-                content_type=getattr(file_item, "type", "") or "",
+                file_bytes=file_bytes,
+                filename=filename,
+                content_type=content_type,
             )
         except DependencyError as exc:
             self._send_json(
@@ -105,6 +98,48 @@ class ResumeAPIHandler(BaseHTTPRequestHandler):
 
     def log_message(self, format: str, *args) -> None:
         return
+
+    def _read_uploaded_pdf(self) -> tuple[str, str, bytes]:
+        content_type = self.headers.get("Content-Type", "")
+        if "multipart/form-data" not in content_type:
+            raise ValueError("Expected a multipart form upload.")
+
+        try:
+            content_length = int(self.headers.get("Content-Length", "0"))
+        except ValueError as exc:
+            raise ValueError("Invalid Content-Length header.") from exc
+
+        if content_length <= 0:
+            raise ValueError("The uploaded request body was empty.")
+
+        body = self.rfile.read(content_length)
+        message = BytesParser(policy=email_policy).parsebytes(
+            (
+                f"Content-Type: {content_type}\r\n"
+                "MIME-Version: 1.0\r\n"
+                "\r\n"
+            ).encode("utf-8")
+            + body
+        )
+
+        if not message.is_multipart():
+            raise ValueError("Invalid multipart form submission.")
+
+        for part in message.iter_parts():
+            if part.get_content_disposition() != "form-data":
+                continue
+
+            field_name = part.get_param("name", header="content-disposition")
+            if field_name != "pdf":
+                continue
+
+            return (
+                part.get_filename() or "",
+                part.get_content_type() or "",
+                part.get_payload(decode=True) or b"",
+            )
+
+        return ("", "", b"")
 
     def _serve_home(self) -> None:
         if not HOME_PAGE.exists():

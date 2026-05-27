@@ -75,7 +75,12 @@ def main() -> None:
         # 6. Extract experience
         raw_experience = experience_extractor.extract(text, candidate_name=basic_info.get("full_name", ""))
         experience = [
-            {"company": job.get("company", ""), "role": job.get("role", "")}
+            {
+                "company": job.get("company", ""),
+                "role": job.get("role", ""),
+                "start_date": job.get("start_date", ""),
+                "end_date": job.get("end_date", ""),
+            }
             for job in raw_experience
         ]
         

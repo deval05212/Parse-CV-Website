@@ -331,8 +331,212 @@ def extract_name_from_filename(filename: str) -> str:
     return name.title() if name else ""
 
 
+JOB_KEYWORDS = [
+    "developer", "engineer", "analyst", "designer", "specialist", 
+    "manager", "lead", "architect", "consultant", "executive", 
+    "intern", "trainee", "associate", "expert", "programmer", 
+    "coder", "administrator", "officer", "bde", "sdr", "bdr", "hr",
+    "qa", "quality assurance", "specialists", "professional"
+]
+
+FILENAME_KEYWORDS = JOB_KEYWORDS + [
+    "stack", "frontend", "backend", "android", "ios", "flutter", 
+    "devops", "ai", "ml", "data science", "data scientist", "sales", 
+    "marketing", "python", "java", "php", "react"
+]
+
+
+def clean_role(role: str) -> str:
+    if not role:
+        return ""
+    # Remove leading/trailing non-alphanumeric except common title chars
+    role = re.sub(r'\s+', ' ', role)
+    # Strip common noise and parentheses if they are unmatched or empty
+    role = role.strip(" \t\n\r.,;:-|/()[]{}*•⚫■★+&")
+    
+    # Strip trailing noise words
+    trailing_noise = {"with", "for", "at", "to", "in", "and", "from", "on", "by", "as", "of", "role", "profile"}
+    while True:
+        words = role.split()
+        if not words:
+            break
+        if words[-1].lower() in trailing_noise:
+            role = " ".join(words[:-1])
+        else:
+            break
+
+    # Strip cities/states from role
+    for geo in ["surat", "gujarat", "ahmedabad", "pune", "mumbai", "india", "bhopal", "delhi", "noida", "vadodara", "baroda"]:
+        role = re.sub(rf'\b{geo}\b', '', role, flags=re.IGNORECASE)
+        
+    # remove words containing digits
+    words = role.split()
+    words_clean = [w for w in words if not any(c.isdigit() for c in w)]
+    role = " ".join(words_clean)
+
+    # clean spaces and punctuation again
+    role = re.sub(r'\s+', ' ', role).strip(" \t\n\r.,;:-|/()[]{}*•⚫■★+&")
+
+    # Clean up unmatched brackets
+    if role.count("(") > role.count(")"):
+        role = role + ")"
+    elif role.count(")") > role.count("("):
+        role = role.replace(")", "")
+        
+    # If role ends up being just noise, discard
+    if len(role) < 2 or len(role) > 75:
+        return ""
+    # Title-case if appropriate or keep it as is
+    if role.isupper() or role.islower():
+        role = role.title()
+    return role
+
+
+def is_valid_role(role: str) -> bool:
+    if not role:
+        return False
+    role_lower = role.lower()
+    
+    # 1. Reject if too short or too long
+    if len(role) < 3 or len(role) > 75:
+        return False
+        
+    # 2. Reject if starts with prepositions or common action verbs
+    invalid_start_words = {
+        "using", "with", "by", "on", "for", "at", "to", "in", "and", "from",
+        "worked", "developed", "built", "created", "implemented", "managed", "designed",
+        "assisted", "integrated", "collaborated", "led", "spearheaded", "optimized",
+        "oversaw", "conducted", "participated", "gained", "improving", "enhancing", "securing"
+    }
+    words = role_lower.split()
+    if words and words[0] in invalid_start_words:
+        return False
+        
+    # 3. Reject if contains any education/degree keywords
+    education_blacklist = {
+        "bachelor", "master", "university", "college", "school", "institute", 
+        "institude", "academy", "education", "hsc", "ssc", "degree", "diploma", 
+        "cgpa", "grade", "percentage", "gpa", "marks", "board", "scool", "collage", 
+        "inst.", "univ.", "student", "pursuing"
+    }
+    if any(w in education_blacklist for w in words):
+        return False
+        
+    # 4. Reject if contains other typical description verbs
+    description_verbs = {
+        "used", "developed", "built", "worked", "created", "implemented", 
+        "managed", "designed", "assisted", "integrated", "collaborated", 
+        "led", "spearheaded", "optimized", "oversaw", "conducted", 
+        "participated", "gained", "improving", "enhancing", "securing"
+    }
+    if any(w in description_verbs for w in words):
+        return False
+        
+    # 5. Reject if contains specific message/template-like strings
+    reject_substrings = ["subject:", "offer letter", "reference", "declaration"]
+    if any(sub in role_lower for sub in reject_substrings):
+        return False
+        
+    # 6. Reject if contains only digits or special characters
+    if not any(c.isalpha() for c in role):
+        return False
+        
+    return True
+
+
+def extract_job_role(text: str, filename_name: str, candidate_name: str, model) -> str:
+    # 1. Try to parse from the first 5-6 lines of the text
+    lines = [line.strip() for line in text.splitlines() if line.strip()][:8]
+    text_role = ""
+    for line in lines:
+        if "@" in line or "http" in line or ".com" in line or any(c.isdigit() for c in line if c not in ["1", "2", "3", "4", "5", "6", "7", "8", "9", "0", "+", "-", "(", ")", " "]):
+            continue
+            
+        line_lower = line.lower()
+        if candidate_name and candidate_name.lower() in line_lower:
+            name_idx = line_lower.find(candidate_name.lower())
+            before = line[:name_idx].strip()
+            after = line[name_idx + len(candidate_name):].strip()
+            
+            for part in [after, before]:
+                part_clean = clean_role(part)
+                if part_clean and is_valid_role(part_clean) and any(kw in part_clean.lower() for kw in JOB_KEYWORDS):
+                    text_role = part_clean
+                    break
+            if text_role:
+                break
+            continue
+            
+        if any(kw in line_lower for kw in JOB_KEYWORDS) and len(line) <= 75:
+            if any(h in line_lower for h in ["experience", "education", "skills", "projects", "certifications", "summary"]):
+                continue
+            part_clean = clean_role(line)
+            if is_valid_role(part_clean):
+                text_role = part_clean
+                break
+
+    # 2. Try GLiNER on first 500 characters
+    gliner_role = ""
+    if model and text and not text_role:
+        header_text = text[:500]
+        header_text = re.sub(r'[a-zA-Z0-9._%+\-]+@[a-zA-Z0-9.\-]+\.[a-zA-Z]{2,}', ' ', header_text)
+        header_text = re.sub(r'(?<![\w@])(?:\+?\d[\d \t\-\.\(\)]{6,14}\d)(?![\w@])', ' ', header_text)
+        
+        entities = model.predict_entities(header_text, labels=["job title", "role", "position"], threshold=0.3)
+        valid_roles = []
+        for ent in sorted(entities, key=lambda x: x.get('score', 0), reverse=True):
+            ent_text = clean_role(ent.get("text", ""))
+            ent_lower = ent_text.lower()
+            if ent_text and is_valid_role(ent_text) and any(kw in ent_lower for kw in JOB_KEYWORDS):
+                if candidate_name and candidate_name.lower() in ent_lower:
+                    ent_text = clean_role(ent_text.replace(candidate_name, "").replace(candidate_name.upper(), "").replace(candidate_name.title(), ""))
+                if ent_text and is_valid_role(ent_text) and len(ent_text) <= 75:
+                    valid_roles.append(ent_text)
+                    break
+        if valid_roles:
+            gliner_role = valid_roles[0]
+
+    # 3. Look in the filename itself
+    filename_role = ""
+    if not text_role and not gliner_role:
+        stem = Path(filename_name).stem
+        stem = re.sub(r'^\d+[-_]?', '', stem)
+        stem = re.sub(r'([a-z])([A-Z])', r'\1 \2', stem)
+        parts = re.split(r'[-_\s]+', stem)
+        
+        candidate_name_words = set(candidate_name.lower().split()) if candidate_name else set()
+        role_parts_filename = []
+        found_keyword = False
+        for p in parts:
+            p_clean = p.strip(".,;:()").lower()
+            if not p_clean:
+                continue
+            if p_clean in candidate_name_words:
+                continue
+            if p_clean in ["resume", "cv", "updated", "final", "new", "placement", "copy"]:
+                continue
+            if any(kw in p_clean for kw in FILENAME_KEYWORDS):
+                found_keyword = True
+            role_parts_filename.append(p)
+        
+        if found_keyword and role_parts_filename:
+            candidate_role = clean_role(" ".join(role_parts_filename))
+            if is_valid_role(candidate_role):
+                filename_role = candidate_role
+
+    final_role = ""
+    if text_role:
+        final_role = text_role
+    elif gliner_role:
+        final_role = gliner_role
+    elif filename_role:
+        final_role = filename_role
+        
+    return final_role
+
+
 def extract_basic_infos(text: str, model, original_name: str, threshold: float = 0.4) -> dict:
-    """Extracts candidate full_name, location, email, phone, linkedin, and github from text."""
+    """Extracts candidate full_name, job_role, location, email, phone, linkedin, and github from text."""
     # 1. Extract contact details
     contact_info = extract_email_phone(text)
     
@@ -358,13 +562,19 @@ def extract_basic_infos(text: str, model, original_name: str, threshold: float =
     if not extracted_name:
         extracted_name = extract_name_from_filename(original_name)
 
-    # 4. Extract location
+    # 4. Extract job role
+    extracted_role = ""
+    if text:
+        extracted_role = extract_job_role(text, original_name, extracted_name, model)
+
+    # 5. Extract location
     extracted_location = ""
     if text:
         extracted_location = extract_location(text, model, extracted_name, threshold=threshold)
 
     return {
         "full_name": extracted_name,
+        "job_role": extracted_role,
         "location": extracted_location,
         "email": contact_info["email"],
         "phone": contact_info["phone"],

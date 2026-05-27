@@ -110,13 +110,17 @@ class ExperienceExtractor:
         entities = self._run_ner(section_text)
         if not entities:
             log.warning("GLiNER found no entities in the experience section.")
-            filtered_rule = [job for job in rule_entries if self._calculate_entry_confidence(job) >= 0.6]
+            recovered_rule = self._validate_and_recover_entries(rule_entries, section_text)
+            filtered_rule = [job for job in recovered_rule if self._calculate_entry_confidence(job) >= 0.6]
             return filtered_rule
 
         ner_entries = self._group_entities(entities, section_text)
         
-        filtered_rule = [job for job in rule_entries if self._calculate_entry_confidence(job) >= 0.6]
-        filtered_ner = [job for job in ner_entries if self._calculate_entry_confidence(job) >= 0.6]
+        recovered_rule = self._validate_and_recover_entries(rule_entries, section_text)
+        recovered_ner = self._validate_and_recover_entries(ner_entries, section_text)
+        
+        filtered_rule = [job for job in recovered_rule if self._calculate_entry_confidence(job) >= 0.6]
+        filtered_ner = [job for job in recovered_ner if self._calculate_entry_confidence(job) >= 0.6]
         
         if self._score_entries(filtered_rule) >= self._score_entries(filtered_ner):
             log.info("Using rule-based experience entries; they scored better than GLiNER grouping.")
@@ -225,6 +229,8 @@ class ExperienceExtractor:
                 # Post-process duration and dates
                 start, end, dur = self._parse_date_range(job["duration"])
                 job["duration"] = dur
+                job["start_date"] = self._normalize_to_yyyy_mm(start)
+                job["end_date"] = self._normalize_to_yyyy_mm(end)
                 
                 # Clean up description
                 job["description"] = self._clean_description(job["description"])
@@ -319,6 +325,66 @@ class ExperienceExtractor:
         company_lower = company_clean.lower()
         words = company_lower.split()
         
+        # 1. Blacklist check (early reject)
+        INVALID_COMPANIES = {
+            "experience",
+            "summary",
+            "profile",
+            "objective",
+            "certifications",
+            "key highlights",
+            "present",
+            "portfolio",
+            "achievements",
+            "responsibilities",
+            "highlight",
+            "certification",
+            "duration"
+        }
+        strong_suffixes = {"ltd", "limited", "inc", "corp", "corporation", "pvt", "llp", "llc", "gmbh", "co"}
+        has_strong_suffix = any(w in strong_suffixes for w in words)
+        
+        if any(blacklisted == company_lower or (blacklisted in words and not has_strong_suffix) for blacklisted in INVALID_COMPANIES):
+            return False
+
+        # 2. Reject if word count > 7
+        if len(words) > 7:
+            return False
+
+        # 3. Reject if contains many verbs
+        if self._contains_many_verbs(company_lower):
+            return False
+
+        # 4. Reject if all lowercase sentence (no uppercase letters at all)
+        if self._is_all_lowercase_sentence(company):
+            return False
+            
+        # 5. Reject company if it ends with sentence-ending punctuation (excluding common abbreviations)
+        company_trimmed = company.strip()
+        if company_trimmed and company_trimmed[-1] in {".", "!", "?", ";"}:
+            abbrev_words = {"ltd.", "pvt.", "co.", "inc.", "corp."}
+            last_word = company_trimmed.split()[-1].lower() if company_trimmed.split() else ""
+            if last_word not in abbrev_words:
+                return False
+
+        # 6. Reject company if it contains invalid patterns, verbs, or technology names
+        INVALID_COMPANY_PATTERNS = [
+            r"\bused\b",
+            r"\bworked\b",
+            r"\bbuilt\b",
+            r"\bcreated\b",
+            r"\bdeveloped\b",
+            r"\bdevelop\b",
+            r"\bhtml\b",
+            r"\bcss\b",
+            r"\breact\b",
+            r"\bnode\.?js\b",
+            r"\bbackend\b",
+            r"\bfrontend\b"
+        ]
+        if any(re.search(pat, company_lower) for pat in INVALID_COMPANY_PATTERNS):
+            return False
+        
         # Reject description sentences/heuristics that are clearly not company names
         desc_words = {
             "developed", "creating", "created", "designed", "designing", "implemented", "implementing",
@@ -328,10 +394,10 @@ class ExperienceExtractor:
             "projects", "academic", "achievements", "contributed", "contributing", "solved", "solving",
             "published", "publishing", "writing", "written", "testing", "tested", "bidding", "proposal",
             "outreach", "negotiation", "closing", "relationships", "partners",
-            "study", "provided", "intermediaries", "manufacturers", "manufacturing", "trading", "staying", "updated"
+            "study", "provided", "intermediaries", "manufacturers", "manufacturing", "trading", "staying", "updated",
+            "passionate", "driving", "growth", "strategic", "brand", "sales", "marketing", "portfolio", "highlights",
+            "included", "assets", "casa"
         }
-        strong_suffixes = {"ltd", "limited", "inc", "corp", "corporation", "pvt", "llp", "llc", "gmbh", "co"}
-        has_strong_suffix = any(w in strong_suffixes for w in words)
         if any(w in words for w in desc_words) and not has_strong_suffix:
             return False
             
@@ -358,8 +424,6 @@ class ExperienceExtractor:
             return False
             
         # Reject if company name matches/contains candidate name words
-        # Use full resume text (self.full_text) for name extraction, NOT the section text
-        # to avoid company names in the experience section being falsely blacklisted.
         candidate_words = set()
         if hasattr(self, "candidate_name") and self.candidate_name:
             candidate_words.update(
@@ -369,7 +433,6 @@ class ExperienceExtractor:
         header_source = getattr(self, "full_text", text)
         header_lines = [l.strip() for l in header_source.split("\n") if l.strip()]
         for line in header_lines[:4]:
-            # Only scan lines that look like a name (short, no digits or contact chars)
             if len(line) < 35 and not any(c in line for c in "@:/.0123456789+()"):
                 candidate_words.update(
                     w for w in re.findall(r'\b\w+\b', line.lower()) if len(w) > 2
@@ -387,7 +450,12 @@ class ExperienceExtractor:
             "services", "service", "and", "with", "for", "at", "about", "the", "an", "a",
             "in", "of", "by", "to", "from", "on", "as", "phone", "email", "address",
             "contact", "remote", "freelance", "highlights", "summary", "profile",
-            "objective", "skills", "continuous", "project", "projects", "work", "job", "position"
+            "objective", "skills", "continuous", "project", "projects", "work", "job", "position",
+            "staff", "hr", "recruiter", "developer", "designer", "manager", "lead", "engineer",
+            "backend", "frontend", "intern", "associate", "analyst", "specialist", "coordinator",
+            "officer", "consultant", "trainee", "admin", "assistant", "expert", "support", "technician",
+            "teacher", "lecturer", "professor", "instructor", "tutor", "trainer", "present", "current",
+            "assets", "casa"
         }:
             return False
             
@@ -435,8 +503,8 @@ class ExperienceExtractor:
         if any(p in company_lower for p in INVALID_COMPANY_PATTERNS):
             return False
 
-        # 1. Blacklist check
-        INVALID_COMPANIES = {
+        # 7. Additional Blacklist check
+        INVALID_COMPANIES_SET = {
             "mern", "react", "firebase", "sap", "bde", "admin", "dice", "linkedin",
             "upwork", "freelancer", "fiverr", "behance", "peopleperhour", "guru", "contra",
             "github", "gitlab", "bitbucket", "trello", "jira", "confluence", "slack", "zoom",
@@ -445,14 +513,14 @@ class ExperienceExtractor:
             "academic project", "project work", "key highlights", "highlights", "summary",
             "profile", "objective", "skills", "technologies"
         }
-        if company_lower in INVALID_COMPANIES:
+        if company_lower in INVALID_COMPANIES_SET:
             return False
             
-        if any(w in INVALID_COMPANIES for w in words):
+        if any(w in INVALID_COMPANIES_SET for w in words):
             if len(words) == 1 or company_lower in {"mern stack", "react js", "react native", "firebase console"}:
                 return False
                 
-        # 2. Reject technology names and skill keywords
+        # 8. Reject technology names and skill keywords
         fallback_tech = {
             "python", "mysql", "mongodb", "postgresql", "sqlite", "oracle", "redis",
             "aws", "azure", "gcp", "docker", "kubernetes", "jenkins", "git", "bootstrap",
@@ -468,7 +536,7 @@ class ExperienceExtractor:
         if len(words) == 1 and words[0] in all_tech:
             return False
             
-        # 3. Reject short uppercase tokens
+        # 9. Reject short uppercase tokens
         INVALID_SHORT_TOKENS = {
             "BDE", "BCA", "MCA", "IT", "HR", "BE", "ME", "CE", "EE", "CSE", "ECE",
             "BCOM", "MCOM", "BSC", "MSC", "PHD", "MBA", "SSC", "HSC", "CBSE", "GSEB",
@@ -489,7 +557,7 @@ class ExperienceExtractor:
                 if not any(c in company_lower for c in "aeiouy"):
                     return False
                     
-        # 4. Detect organization patterns
+        # 10. Detect organization patterns
         ORG_MARKERS = {
             "ltd", "limited", "inc", "corp", "corporation", "solutions", "services",
             "technologies", "technology", "global", "pvt", "llp", "systems", "bank",
@@ -505,7 +573,7 @@ class ExperienceExtractor:
                 return False
             return True
             
-        # 5. Heuristics: context validation
+        # 11. Heuristics: context validation
         text_lower = text.lower()
         company_pattern = re.escape(company_lower)
         
@@ -551,12 +619,130 @@ class ExperienceExtractor:
                 
         return is_valid_context
 
+    def _contains_many_verbs(self, company_lower: str) -> bool:
+        words = company_lower.split()
+        VERB_WORDS = {
+            "use", "used", "using", "work", "worked", "working", "develop", "developed", "developing",
+            "build", "built", "building", "create", "created", "creating", "design", "designed", "designing",
+            "implement", "implemented", "implementing", "integrate", "integrated", "integrating",
+            "manage", "managed", "managing", "lead", "led", "leading", "spearhead", "spearheaded", "spearheading",
+            "conduct", "conducted", "conducting", "coordinate", "coordinated", "coordinating",
+            "maintain", "maintained", "maintaining", "provide", "provided", "providing",
+            "gain", "gained", "gaining", "learn", "learned", "learning", "enhance", "enhanced", "enhancing",
+            "solve", "solved", "solving", "analyze", "analyzed", "analyzing", "prepare", "prepared", "preparing",
+            "test", "tested", "testing", "write", "wrote", "writing", "make", "made", "making", "keep", "kept", "keeping",
+            "run", "ran", "running", "get", "got", "getting", "help", "helped", "helping", "assist", "assisted", "assisting",
+            "monitor", "monitored", "monitoring", "drive", "drove", "driving", "deliver", "delivered", "delivering",
+            "support", "supported", "supporting", "collaborate", "collaborated", "collaborating",
+            "focus", "focused", "focusing", "optimize", "optimized", "optimizing", "ensure", "ensured", "ensuring",
+            "contribute", "contributed", "contributing", "boost", "boosted", "boosting", "perform", "performed", "performing",
+            "secure", "secured", "securing", "expand", "expanded", "expanding", "recognize", "recognized", "recognizing",
+            "achieve", "achieved", "achieving", "sales", "selling", "sold"
+        }
+        EXCLUDED_COMPANY_WORDS = {
+            "learning", "consulting", "engineering", "trading", "marketing", "solutions",
+            "services", "systems", "group", "labs", "infotech", "software", "design", "co",
+            "corporation", "limited", "ltd", "pvt", "llp", "llc", "gmbh"
+        }
+        verb_count = 0
+        for w in words:
+            w_clean = w.strip(".,;:()[]{}")
+            if w_clean in EXCLUDED_COMPANY_WORDS:
+                continue
+            is_verb = False
+            if w_clean in VERB_WORDS:
+                is_verb = True
+            elif len(w_clean) > 3:
+                if w_clean.endswith("ed") and w_clean not in {"limited", "united", "bed", "red", "shed", "feed", "speed", "seed"}:
+                    is_verb = True
+                elif w_clean.endswith("ing") and w_clean not in {"banking", "manufacturing", "publishing", "building", "catergoring", "ring", "wing", "sing", "thing", "spring", "king", "ping"}:
+                    is_verb = True
+            if is_verb:
+                verb_count += 1
+        return verb_count >= 2
+
+    def _is_all_lowercase_sentence(self, s: str) -> bool:
+        letters = [c for c in s if c.isalpha()]
+        if not letters:
+            return False
+        return all(c.islower() for c in letters)
+
+    def _normalize_to_yyyy_mm(self, s: str) -> str:
+        s = s.strip().lower()
+        if not s:
+            return ""
+        if s in {"present", "current", "ongoing", "now"}:
+            return "Present"
+            
+        MONTHS_MAP = {
+            "jan": "01", "january": "01",
+            "feb": "02", "february": "02",
+            "mar": "03", "march": "03",
+            "apr": "04", "april": "04",
+            "may": "05",
+            "jun": "06", "june": "06",
+            "jul": "07", "july": "07",
+            "aug": "08", "august": "08",
+            "sep": "09", "september": "09", "sept": "09",
+            "oct": "10", "october": "10",
+            "nov": "11", "november": "11",
+            "dec": "12", "december": "12"
+        }
+        
+        # 1. Match MM/YYYY or MM-YYYY (e.g. 01/2025, 12-2021)
+        m = re.match(r'^(0?[1-9]|1[0-2])[-/](\d{4})$', s)
+        if m:
+            month = m.group(1).zfill(2)
+            year = m.group(2)
+            return f"{year}-{month}"
+            
+        # 2. Match YYYY-MM (e.g. 2021-12)
+        m = re.match(r'^(\d{4})[-/](0?[1-9]|1[0-2])$', s)
+        if m:
+            year = m.group(1)
+            month = m.group(2).zfill(2)
+            return f"{year}-{month}"
+            
+        # 3. Match Month Name + Year (e.g. jan 2022, january 2022)
+        m = re.match(r'^([a-z]{3,9})\s*[-/,\s]\s*(\d{4})$', s)
+        if m:
+            month_name = m.group(1)
+            year = m.group(2)
+            if month_name in MONTHS_MAP:
+                return f"{year}-{MONTHS_MAP[month_name]}"
+                
+        # 4. Match Year + Month Name (e.g. 2022 jan)
+        m = re.match(r'^(\d{4})\s*[-/,\s]\s*([a-z]{3,9})$', s)
+        if m:
+            year = m.group(1)
+            month_name = m.group(2)
+            if month_name in MONTHS_MAP:
+                return f"{year}-{MONTHS_MAP[month_name]}"
+                
+        # 5. Match YYYY (e.g. 2022)
+        m = re.match(r'^(\d{4})$', s)
+        if m:
+            return f"{m.group(1)}-01"
+            
+        # Fallback: search for 4-digit year and month name
+        m_year = re.search(r'\b(19|20)\d{2}\b', s)
+        if m_year:
+            year = m_year.group(0)
+            for month_name, month_num in MONTHS_MAP.items():
+                if month_name in s:
+                    return f"{year}-{month_num}"
+            return f"{year}-01"
+            
+        return s.title()
+
     def _empty_job(self) -> Dict[str, Any]:
         return {
             "company": "",
             "location": "",
             "role": "",
             "duration": "",
+            "start_date": "",
+            "end_date": "",
             "description": ""
         }
 
@@ -970,7 +1156,10 @@ class ExperienceExtractor:
                 log.info(f"Rejecting invalid company name in fallback: {current_job['company']}")
                 current_job["company"] = ""
             
-            current_job["duration"] = self._parse_date_range(current_job["duration"])[2]
+            start, end, dur = self._parse_date_range(current_job["duration"])
+            current_job["duration"] = dur
+            current_job["start_date"] = self._normalize_to_yyyy_mm(start)
+            current_job["end_date"] = self._normalize_to_yyyy_mm(end)
             current_job["description"] = self._clean_description(current_job["description"])
             
             if current_job["company"] or current_job["role"]:
@@ -1528,6 +1717,163 @@ class ExperienceExtractor:
         if not value:
             return base
         return f"{base} {value}".strip() if base else value
+
+    def _find_best_matching_line_index(self, query: str, lines: List[str]) -> Optional[int]:
+        query_clean = query.lower().strip()
+        if not query_clean:
+            return None
+            
+        # 1. Try exact or substring match
+        for idx, line in enumerate(lines):
+            if query_clean in line.lower():
+                return idx
+                
+        # 2. Try reverse substring match (line is inside query)
+        for idx, line in enumerate(lines):
+            line_clean = line.lower().strip()
+            if len(line_clean) > 5 and line_clean in query_clean:
+                return idx
+                
+        # 3. Try token overlap
+        query_tokens = set(re.findall(r'\b\w+\b', query_clean))
+        if not query_tokens:
+            return None
+            
+        best_idx = None
+        best_overlap = 0
+        for idx, line in enumerate(lines):
+            line_tokens = set(re.findall(r'\b\w+\b', line.lower()))
+            overlap = len(query_tokens.intersection(line_tokens))
+            if overlap > best_overlap:
+                best_overlap = overlap
+                best_idx = idx
+                
+        if best_overlap >= 1:
+            return best_idx
+            
+        return None
+
+    def _is_candidate_company(self, line: str) -> bool:
+        line_clean = line.strip(" ,.-–—|/()[]{}")
+        if not line_clean or len(line_clean) < 3:
+            return False
+        # Cannot be date
+        if self._is_date_only_line(line_clean):
+            return False
+        # Cannot be location
+        if self._is_location_line(line_clean):
+            return False
+        # Cannot be description/bullet
+        cls = self._classify_line(line_clean)
+        if cls in {"DESCRIPTION", "BULLET_POINT", "DATE", "LOCATION"}:
+            return False
+        # Let's check company score or generic capitalized words
+        if self._company_score(line_clean) > 0:
+            return True
+        if cls == "COMPANY":
+            return True
+        # If it's a short title-cased line and not a role
+        if len(line_clean) < 50 and self._role_score(line_clean) == 0:
+            # Check if it has uppercase letter
+            if any(c.isupper() for c in line_clean):
+                return True
+        return False
+
+    def _is_candidate_role(self, line: str) -> bool:
+        line_clean = line.strip(" ,.-–—|/()[]{}")
+        if not line_clean or len(line_clean) < 3:
+            return False
+        if self._is_date_only_line(line_clean):
+            return False
+        if self._is_location_line(line_clean):
+            return False
+        cls = self._classify_line(line_clean)
+        if cls in {"DESCRIPTION", "BULLET_POINT", "DATE", "LOCATION"}:
+            return False
+        if self._role_score(line_clean) > 0:
+            return True
+        if cls == "ROLE":
+            return True
+        # If it's a short line containing common role words or markers
+        if len(line_clean) < 50 and any(w in self.ROLE_MARKERS for w in line_clean.lower().split()):
+            return True
+        return False
+
+    def _validate_and_recover_entries(self, entries: List[Dict[str, Any]], section_text: str) -> List[Dict[str, Any]]:
+        cleaned_entries = []
+        lines = [l.strip() for l in section_text.split("\n")]
+        
+        for entry in entries:
+            company = entry.get("company", "").strip()
+            role = entry.get("role", "").strip()
+            
+            # If both are empty, discard
+            if not company and not role:
+                continue
+                
+            # If only one exists, attempt recovery
+            if not company or not role:
+                recovered_entry = entry.copy()
+                query = role if role else company
+                idx = self._find_best_matching_line_index(query, lines)
+                
+                if idx is not None:
+                    offsets = [-1, 1, -2, 2, -3, 3]
+                    for offset in offsets:
+                        target_idx = idx + offset
+                        if 0 <= target_idx < len(lines):
+                            nearby_line = lines[target_idx]
+                            
+                            if not company:  # We need company
+                                if self._is_candidate_company(nearby_line):
+                                    temp_job = self._empty_job()
+                                    temp_job["company"] = nearby_line
+                                    self._clean_swapped_or_merged_roles(temp_job, section_text)
+                                    if temp_job["company"]:
+                                        recovered_entry["company"] = temp_job["company"]
+                                        if not recovered_entry["role"] and temp_job["role"]:
+                                            recovered_entry["role"] = temp_job["role"]
+                                        break
+                            else:  # We need role
+                                if self._is_candidate_role(nearby_line):
+                                    temp_job = self._empty_job()
+                                    temp_job["role"] = nearby_line
+                                    self._clean_swapped_or_merged_roles(temp_job, section_text)
+                                    if temp_job["role"]:
+                                        recovered_entry["role"] = temp_job["role"]
+                                        if not recovered_entry["company"] and temp_job["company"]:
+                                            recovered_entry["company"] = temp_job["company"]
+                                        break
+                
+                # Check if it is still partially empty after recovery
+                final_company = recovered_entry.get("company", "").strip()
+                final_role = recovered_entry.get("role", "").strip()
+                
+                if not final_company or not final_role:
+                    # Still partially empty -> discard
+                    continue
+                
+                entry = recovered_entry
+            
+            # Re-validate validity of company name after recovery
+            if entry["company"] and not self._is_valid_company(entry["company"], section_text):
+                continue
+                
+            # Double check that we don't have empty company or role
+            if not entry.get("company", "").strip() or not entry.get("role", "").strip():
+                continue
+                
+            cleaned_entries.append(entry)
+            
+        # Deduplicate final entries by (company, role) to avoid duplicates from recovery of separate parts of the same job
+        seen = set()
+        deduped_entries = []
+        for entry in cleaned_entries:
+            key = (entry["company"].lower().strip(), entry["role"].lower().strip())
+            if key not in seen:
+                seen.add(key)
+                deduped_entries.append(entry)
+        return deduped_entries
 
     def _score_entries(self, entries: List[Dict[str, Any]]) -> int:
         score = 0

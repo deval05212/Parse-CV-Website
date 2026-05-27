@@ -24,6 +24,36 @@
         box-sizing: border-box;
       }
 
+      /* Custom Premium Scrollbars */
+      ::-webkit-scrollbar {
+        width: 8px;
+        height: 8px;
+      }
+
+      ::-webkit-scrollbar-track {
+        background: rgba(2, 6, 23, 0.4);
+        border-radius: 999px;
+      }
+
+      ::-webkit-scrollbar-thumb {
+        background: rgba(151, 171, 201, 0.24);
+        border-radius: 999px;
+        border: 2px solid transparent;
+        background-clip: padding-box;
+      }
+
+      ::-webkit-scrollbar-thumb:hover {
+        background: rgba(94, 234, 212, 0.55);
+        border: 2px solid transparent;
+        background-clip: padding-box;
+      }
+
+      /* Firefox support */
+      * {
+        scrollbar-width: thin;
+        scrollbar-color: rgba(151, 171, 201, 0.24) rgba(2, 6, 23, 0.4);
+      }
+
       body {
         margin: 0;
         min-height: 100vh;
@@ -59,6 +89,30 @@
         z-index: 1;
         width: min(1180px, calc(100% - 32px));
         margin: 28px auto;
+        transition: width 0.4s cubic-bezier(0.16, 1, 0.3, 1), max-width 0.4s cubic-bezier(0.16, 1, 0.3, 1);
+      }
+
+      @media (min-width: 1025px) {
+        .page.has-results {
+          display: grid;
+          grid-template-columns: 460px 1fr;
+          gap: 28px;
+          align-items: start;
+          width: min(1600px, calc(100% - 32px));
+        }
+
+        .page.has-results .hero {
+          display: flex;
+          flex-direction: column;
+          gap: 24px;
+          grid-template-columns: none;
+          position: sticky;
+          top: 28px;
+        }
+
+        .page.has-results .results {
+          margin-top: 0;
+        }
       }
 
       .hero {
@@ -369,7 +423,7 @@
 
       .summary-grid {
         display: grid;
-        grid-template-columns: repeat(4, minmax(0, 1fr));
+        grid-template-columns: repeat(5, minmax(0, 1fr));
         gap: 14px;
         margin-bottom: 18px;
       }
@@ -819,6 +873,10 @@
             <span id="summaryName">-</span>
           </div>
           <div class="summary-card">
+            <strong>Job Role</strong>
+            <span id="summaryRole">-</span>
+          </div>
+          <div class="summary-card">
             <strong>Email</strong>
             <span id="summaryEmail">-</span>
           </div>
@@ -992,6 +1050,7 @@ No JSON response yet.</pre
       const fileSize = document.getElementById("fileSize");
       const status = document.getElementById("status");
       const results = document.getElementById("results");
+      const pageContainer = document.querySelector(".page");
       const rawOutput = document.getElementById("rawOutput");
       const cleanedOutput = document.getElementById("cleanedOutput");
       const jsonOutput = document.getElementById("jsonOutput");
@@ -1008,6 +1067,7 @@ No JSON response yet.</pre
       const skillsCount = document.getElementById("skillsCount");
       const experienceCount = document.getElementById("experienceCount");
       const summaryName = document.getElementById("summaryName");
+      const summaryRole = document.getElementById("summaryRole");
       const summaryEmail = document.getElementById("summaryEmail");
       const summaryPhone = document.getElementById("summaryPhone");
       const summaryLocation = document.getElementById("summaryLocation");
@@ -1097,6 +1157,7 @@ No JSON response yet.</pre
         removeBtn.disabled = true;
         downloadJsonBtn.disabled = true;
         results.classList.remove("visible");
+        pageContainer.classList.remove("has-results");
         resetOutputs();
         setStatus("File removed. Choose another PDF when you are ready.", "");
       });
@@ -1164,6 +1225,7 @@ No JSON response yet.</pre
         removeBtn.disabled = false;
         downloadJsonBtn.disabled = true;
         results.classList.remove("visible");
+        pageContainer.classList.remove("has-results");
         resetOutputs();
         setStatus(
           "PDF selected. Click parse to run extraction, cleaning, and JSON conversion.",
@@ -1177,6 +1239,7 @@ No JSON response yet.</pre
         const knownKeys = new Set([
           "file_name",
           "full_name",
+          "job_role",
           "email",
           "phone",
           "location",
@@ -1201,6 +1264,7 @@ No JSON response yet.</pre
         experienceCount.textContent = meta.experience_count || 0;
 
         summaryName.textContent = parsedData.full_name || "Not found";
+        summaryRole.textContent = parsedData.job_role || "Not found";
         summaryEmail.textContent = parsedData.email || "Not found";
         summaryPhone.textContent = parsedData.phone || "Not found";
         summaryLocation.textContent = parsedData.location || "Not found";
@@ -1213,6 +1277,7 @@ No JSON response yet.</pre
               value: parsedData.file_name || data.file_name || "",
             },
             { label: "Full Name", value: parsedData.full_name || "" },
+            { label: "Job Role", value: parsedData.job_role || "" },
             { label: "Email", value: parsedData.email || "" },
             { label: "Phone", value: parsedData.phone || "" },
             { label: "Location", value: parsedData.location || "" },
@@ -1264,6 +1329,7 @@ No JSON response yet.</pre
 
         downloadJsonBtn.disabled = false;
         results.classList.add("visible");
+        pageContainer.classList.add("has-results");
       }
 
       function resetOutputs() {
@@ -1281,6 +1347,7 @@ No JSON response yet.</pre
         experienceCount.textContent = "0";
 
         summaryName.textContent = "-";
+        summaryRole.textContent = "-";
         summaryEmail.textContent = "-";
         summaryPhone.textContent = "-";
         summaryLocation.textContent = "-";
@@ -1623,6 +1690,7 @@ No JSON response yet.</pre
           endpoints.push(`${window.location.origin}/api/parse-pdf`);
         }
 
+        const defaultApiPort = "5200";
         const protocol =
           window.location.protocol === "https:" ? "https:" : "http:";
         const hosts = new Set([
@@ -1632,7 +1700,7 @@ No JSON response yet.</pre
         ]);
 
         hosts.forEach((host) => {
-          endpoints.push(`${protocol}//${host}:8000/api/parse-pdf`);
+          endpoints.push(`${protocol}//${host}:${defaultApiPort}/api/parse-pdf`);
         });
 
         return [...new Set(endpoints)];
@@ -1667,7 +1735,7 @@ No JSON response yet.</pre
         }
 
         throw new Error(
-          "Backend not reachable. Start `python3 main.py` and open `http://127.0.0.1:8000/`.",
+          "Backend not reachable. Start `python3 main.py` and open `http://127.0.0.1:5200/`.",
         );
       }
 
@@ -1676,7 +1744,7 @@ No JSON response yet.</pre
 
         if (!responseText.trim()) {
           const error = new Error(
-            "The parser API returned an empty response. Open the app from `http://127.0.0.1:8000/`.",
+            "The parser API returned an empty response. Open the app from `http://127.0.0.1:5200/`.",
           );
           error.allowFallback = true;
           throw error;
@@ -1686,7 +1754,7 @@ No JSON response yet.</pre
           return JSON.parse(responseText);
         } catch (parseError) {
           const error = new Error(
-            "The parser response was not valid JSON. Open the app from `http://127.0.0.1:8000/`.",
+            "The parser response was not valid JSON. Open the app from `http://127.0.0.1:5200/`.",
           );
           error.allowFallback = true;
           throw error;

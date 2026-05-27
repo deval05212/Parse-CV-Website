@@ -102,17 +102,64 @@ def merge_phone_numbers(text: str) -> str:
 
 def normalize_headers(text: str) -> str:
     header_map = {
+        # EXPERIENCE
+        "experience": "EXPERIENCE",
+        "experiences": "EXPERIENCE",
         "professional experience": "EXPERIENCE",
+        "professional experiences": "EXPERIENCE",
         "work experience": "EXPERIENCE",
+        "work experiences": "EXPERIENCE",
         "employment history": "EXPERIENCE",
         "work history": "EXPERIENCE",
+        "professional background": "EXPERIENCE",
+        "employment": "EXPERIENCE",
+        "career history": "EXPERIENCE",
+        "professional work experience": "EXPERIENCE",
+        "work experience / freelance": "EXPERIENCE",
+        
+        # EDUCATION
+        "education": "EDUCATION",
+        "educations": "EDUCATION",
         "academic background": "EDUCATION",
         "educational qualification": "EDUCATION",
+        "educational qualifications": "EDUCATION",
+        "academic profile": "EDUCATION",
+        "academics": "EDUCATION",
+        "academic credentials": "EDUCATION",
+        "my educations": "EDUCATION",
+        "educational background": "EDUCATION",
+        
+        # SKILLS
+        "skills": "SKILLS",
         "technical skills": "SKILLS",
         "key skills": "SKILLS",
-        "professional summary": "SUMMARY",
-        "personal details": "PERSONAL DETAILS",
+        "skills / technologies": "SKILLS",
+        "core skills": "SKILLS",
+        "professional skills": "SKILLS",
+        "skills and technologies": "SKILLS",
+        "technical expertise": "SKILLS",
+        
+        # PROJECTS
+        "projects": "PROJECTS",
+        "personal projects": "PROJECTS",
+        "academic projects": "PROJECTS",
+        "key projects": "PROJECTS",
         "projects and achievements": "PROJECTS",
+        "project work": "PROJECTS",
+        
+        # CERTIFICATES
+        "certifications": "CERTIFICATES",
+        "certificates": "CERTIFICATES",
+        "certifications and licenses": "CERTIFICATES",
+        "courses": "CERTIFICATES",
+        "training": "CERTIFICATES",
+        "training and certifications": "CERTIFICATES",
+        
+        # SUMMARY
+        "professional summary": "SUMMARY",
+        "summary": "SUMMARY",
+        "profile": "SUMMARY",
+        "personal details": "PERSONAL DETAILS",
     }
     
     lines = text.split("\n")
