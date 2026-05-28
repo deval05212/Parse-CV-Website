@@ -45,6 +45,131 @@ BLACKLIST_DEGREES = {
     "limited", "private", "pvt", "ltd", "corporation", "corp", "co", "company"
 }
 
+DATE_PART = (
+    r'(?:'
+    r'(?:0?[1-9]|1[0-2])[-/](?:19|20)\d{2}'  # MM/YYYY or MM-YYYY
+    r'|(?:19|20)\d{2}(?:[-/]\d{2})?'
+    r'|(?:jan(?:uary)?|feb(?:ruary)?|mar(?:ch)?|apr(?:il)?|may|jun(?:e)?|jul(?:y)?|aug(?:ust)?|sep(?:t|tember)?|oct(?:ober)?|nov(?:ember)?|dec(?:ember)?)\s+(?:19|20)\d{2}'
+    r')'
+)
+DATE_RE = re.compile(
+    rf'\b({DATE_PART})\b(?:\s*(?:[-–—]|to|until)?\s*\b({DATE_PART}|present|current)\b)?',
+    re.I,
+)
+
+
+def normalize_to_yyyy_mm(s: str) -> str:
+    s = s.strip().lower()
+    if not s:
+        return ""
+    if s in {"present", "current", "ongoing", "now"}:
+        return "Present"
+        
+    MONTHS_MAP = {
+        "jan": "01", "january": "01",
+        "feb": "02", "february": "02",
+        "mar": "03", "march": "03",
+        "apr": "04", "april": "04",
+        "may": "05",
+        "jun": "06", "june": "06",
+        "jul": "07", "july": "07",
+        "aug": "08", "august": "08",
+        "sep": "09", "september": "09", "sept": "09",
+        "oct": "10", "october": "10",
+        "nov": "11", "november": "11",
+        "dec": "12", "december": "12"
+    }
+    
+    # 1. Match MM/YYYY or MM-YYYY (e.g. 01/2025, 12-2021)
+    m = re.match(r'^(0?[1-9]|1[0-2])[-/](\d{4})$', s)
+    if m:
+        month = m.group(1).zfill(2)
+        year = m.group(2)
+        return f"{year}-{month}"
+        
+    # 2. Match YYYY-MM (e.g. 2021-12)
+    m = re.match(r'^(\d{4})[-/](0?[1-9]|1[0-2])$', s)
+    if m:
+        year = m.group(1)
+        month = m.group(2).zfill(2)
+        return f"{year}-{month}"
+        
+    # 3. Match Month Name + Year (e.g. jan 2022, january 2022)
+    m = re.match(r'^([a-z]{3,9})\s*[-/,\s]\s*(\d{4})$', s)
+    if m:
+        month_name = m.group(1)
+        year = m.group(2)
+        if month_name in MONTHS_MAP:
+            return f"{year}-{MONTHS_MAP[month_name]}"
+            
+    # 4. Match Year + Month Name (e.g. 2022 jan)
+    m = re.match(r'^(\d{4})\s*[-/,\s]\s*([a-z]{3,9})$', s)
+    if m:
+        year = m.group(1)
+        month_name = m.group(2)
+        if month_name in MONTHS_MAP:
+            return f"{year}-{MONTHS_MAP[month_name]}"
+            
+    # 5. Match YYYY (e.g. 2022)
+    m = re.match(r'^(\d{4})$', s)
+    if m:
+        return f"{m.group(1)}-01"
+        
+    # Fallback: search for 4-digit year and month name
+    m_year = re.search(r'\b(19|20)\d{2}\b', s)
+    if m_year:
+        year = m_year.group(0)
+        for month_name, month_num in MONTHS_MAP.items():
+            if month_name in s:
+                return f"{year}-{month_num}"
+        return f"{year}-01"
+        
+    return s.title()
+
+
+def parse_date_range(date_str: str) -> tuple[str, str]:
+    if not date_str:
+        return "", ""
+        
+    # Handle open-ended dates like "Sep 2025 -"
+    clean_date_str = date_str.strip()
+    if clean_date_str.endswith("-") or clean_date_str.endswith("–"):
+         return clean_date_str.rstrip("-–").strip(), "Present"
+         
+    parts = re.split(r'\s+(?:[-–—]|to|until)\s+|\s+[-–—]\s*', clean_date_str, flags=re.I)
+    parts = [p.strip() for p in parts if p.strip()]
+    
+    start = parts[0] if len(parts) > 0 else ""
+    end = parts[1] if len(parts) > 1 else ""
+    
+    if not end and ("present" in clean_date_str.lower() or "current" in clean_date_str.lower()):
+        end = "Present"
+        
+    return normalize_to_yyyy_mm(start), normalize_to_yyyy_mm(end)
+
+
+def find_dates_with_lines(section_text: str) -> list[dict]:
+    dates = []
+    for m in DATE_RE.finditer(section_text):
+        match_text = m.group(0)
+        start_pos = m.start()
+        line_num = section_text[:start_pos].count('\n')
+        dates.append({
+            "text": match_text,
+            "line": line_num
+        })
+    return dates
+
+
+def find_closest_date_range(entity_line: int, dates: list[dict], max_line_diff: int = 2) -> tuple[str, str]:
+    candidates = [d for d in dates if abs(d['line'] - entity_line) <= max_line_diff]
+    if not candidates:
+        return "", ""
+    candidates.sort(key=lambda d: abs(d['line'] - entity_line))
+    best_candidate = candidates[0]
+    return parse_date_range(best_candidate['text'])
+
+
 
 def exclude_experience_section(text: str) -> str:
     """Locates the experience section and removes it from the text, returning the rest.
@@ -649,6 +774,9 @@ def group_entities_refined(entities, section_text):
         if last_school_end <= first_degree_start or last_degree_end <= first_school_start:
             is_parallel = True
             
+    # Pre-extract all dates with their line numbers in the section_text
+    dates = find_dates_with_lines(section_text)
+
     if is_parallel:
         # Pair 1-to-1 by index
         for i, deg_ent in enumerate(cleaned_degrees):
@@ -659,7 +787,8 @@ def group_entities_refined(entities, section_text):
                 school_text = ""
             entries.append({
                 "degree_or_board": deg_text,
-                "university_or_school": school_text
+                "university_or_school": school_text,
+                "line": deg_ent['line']
             })
     else:
         # Group degrees by line number
@@ -702,19 +831,22 @@ def group_entities_refined(entities, section_text):
             for d in degs:
                 entries.append({
                     "degree_or_board": d['text'],
-                    "university_or_school": school_str
+                    "university_or_school": school_str,
+                    "line": line
                 })
                 
         if cleaned_schools and not cleaned_degrees:
             school_str = ", ".join(s['text'] for s in cleaned_schools)
             entries.append({
                 "degree_or_board": "",
-                "university_or_school": school_str
+                "university_or_school": school_str,
+                "line": cleaned_schools[0]['line']
             })
             
     # Global deduplication, normalization, and school merging layer
     deg_to_schools = {}
     deg_order = []
+    deg_to_dates = {}
     
     for entry in entries:
         if not is_valid_education_record(entry):
@@ -722,6 +854,7 @@ def group_entities_refined(entities, section_text):
             
         deg = entry.get("degree_or_board", "")
         school = entry.get("university_or_school", "").strip()
+        line = entry.get("line", 0)
         
         # Apply normalization layer
         norm_deg = normalize_degree_name(deg)
@@ -729,6 +862,10 @@ def group_entities_refined(entities, section_text):
         if norm_deg not in deg_to_schools:
             deg_to_schools[norm_deg] = []
             deg_order.append(norm_deg)
+            
+        if norm_deg not in deg_to_dates or not any(deg_to_dates[norm_deg]):
+            start_d, end_d = find_closest_date_range(line, dates)
+            deg_to_dates[norm_deg] = (start_d, end_d)
             
         if school:
             norm_school = re.sub(r'[^a-z0-9]', '', school.lower())
@@ -745,12 +882,16 @@ def group_entities_refined(entities, section_text):
     for norm_deg in deg_order:
         schools = deg_to_schools[norm_deg]
         school_str = ", ".join(schools) if schools else ""
+        start_d, end_d = deg_to_dates.get(norm_deg, ("", ""))
         final_entries.append({
             "degree_or_board": norm_deg,
-            "university_or_school": school_str
+            "university_or_school": school_str,
+            "start_date": start_d,
+            "end_date": end_d
         })
         
     return final_entries
+
 
 
 def classify_education_item(item: dict) -> str:
