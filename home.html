@@ -93,24 +93,61 @@
       }
 
       @media (min-width: 1025px) {
-        .page.has-results {
+        .page.has-file:not(.has-results) {
           display: grid;
-          grid-template-columns: 460px 1fr;
+          grid-template-columns: 1.2fr 1fr;
           gap: 28px;
           align-items: start;
-          width: min(1600px, calc(100% - 32px));
+          width: min(1500px, calc(100% - 32px));
         }
 
-        .page.has-results .hero {
+        .page.has-file:not(.has-results) .pdf-preview {
+          grid-column: 1;
+          grid-row: 1;
           display: flex;
-          flex-direction: column;
-          gap: 24px;
-          grid-template-columns: none;
+          height: calc(100vh - 56px);
           position: sticky;
           top: 28px;
         }
 
+        .page.has-file:not(.has-results) .hero {
+          grid-column: 2;
+          grid-row: 1;
+          display: flex;
+          flex-direction: column;
+          gap: 24px;
+        }
+
+        .page.has-results {
+          display: grid;
+          grid-template-columns: 1.1fr 1fr;
+          gap: 28px;
+          align-items: start;
+          width: min(1600px, calc(100% - 32px));
+          max-width: 100%;
+        }
+
+        .page.has-results .hero {
+          grid-column: 1 / -1;
+          grid-row: 1;
+          display: grid;
+          grid-template-columns: 1.15fr 0.85fr;
+          gap: 24px;
+          margin-bottom: 0;
+        }
+
+        .page.has-results .pdf-preview {
+          grid-column: 1;
+          grid-row: 2;
+          position: sticky;
+          top: 28px;
+          height: calc(100vh - 56px);
+          display: flex;
+        }
+
         .page.has-results .results {
+          grid-column: 2;
+          grid-row: 2;
           margin-top: 0;
         }
       }
@@ -132,8 +169,57 @@
 
       .hero-copy,
       .hero-side,
-      .results {
+      .results,
+      .pdf-preview {
         padding: 28px;
+      }
+
+      /* PDF Preview Styles */
+      .pdf-preview {
+        display: none;
+        flex-direction: column;
+        margin-top: 26px;
+      }
+
+      @media (max-width: 1024px) {
+        .pdf-preview {
+          height: 600px;
+        }
+      }
+
+      .pdf-preview.visible {
+        display: flex;
+      }
+
+      .pdf-preview .pdf-body {
+        flex: 1;
+        min-height: 0;
+        margin-top: 16px;
+        border-radius: 18px;
+        overflow: hidden;
+        background: #0f172a;
+        border: 1px solid var(--panel-border);
+      }
+
+      .pdf-preview iframe {
+        width: 100%;
+        height: 100%;
+        border: none;
+        display: block;
+      }
+
+      /* Compact mode when file is present */
+      .page.has-file .hero-copy h1,
+      .page.has-file .hero-copy .lede,
+      .page.has-file .hero-copy .process-list,
+      .page.has-results .hero-copy h1,
+      .page.has-results .hero-copy .lede,
+      .page.has-results .hero-copy .process-list {
+        display: none;
+      }
+      .page.has-file .hero-copy .eyebrow,
+      .page.has-results .hero-copy .eyebrow {
+        margin-bottom: 0;
       }
 
       .eyebrow {
@@ -421,31 +507,10 @@
         margin-bottom: 22px;
       }
 
-      .summary-grid {
-        display: grid;
-        grid-template-columns: repeat(7, minmax(0, 1fr));
-        gap: 14px;
-        margin-bottom: 18px;
-      }
 
-      .summary-card {
-        padding: 16px;
-        border-radius: 18px;
-        background: rgba(7, 17, 31, 0.82);
-        border: 1px solid rgba(151, 171, 201, 0.12);
-      }
-
-      .summary-card strong {
-        display: block;
-        color: var(--accent);
-        font-size: 0.76rem;
-        letter-spacing: 0.08em;
-        text-transform: uppercase;
-        margin-bottom: 8px;
-      }
 
       .result-grid {
-        grid-template-columns: repeat(3, minmax(0, 1fr));
+        grid-template-columns: 1fr;
       }
 
       .structured-grid {
@@ -486,11 +551,11 @@
       }
 
       .detail-list {
-        grid-template-columns: repeat(2, minmax(0, 1fr));
+        grid-template-columns: 1fr;
       }
 
       .additional-grid {
-        grid-template-columns: repeat(2, minmax(0, 1fr));
+        grid-template-columns: 1fr;
       }
 
       .detail-card,
@@ -798,7 +863,7 @@
 
             <div class="button-row">
               <button id="browseBtn" type="button">Choose PDF</button>
-              <button id="parseBtn" class="button-warm" type="button" disabled>
+              <button id="parseBtn" class="button-warm" type="button" disabled style="display: none;">
                 Parse Resume
               </button>
               <button
@@ -854,8 +919,17 @@
               <strong class="metric-value" id="projectsCount">0</strong>
             </div>
           </div>
-        </aside>
       </section>
+
+      <article id="pdfPreview" class="card pdf-preview">
+        <div class="pdf-head">
+          <span class="eyebrow">Document Viewer</span>
+          <h2 style="margin-top: 12px; font-size: 2.2rem; font-family: Georgia, serif;">Original Resume</h2>
+        </div>
+        <div class="pdf-body">
+          <iframe id="pdfViewer" src="" type="application/pdf"></iframe>
+        </div>
+      </article>
 
       <section id="results" class="card results">
         <div class="results-head">
@@ -875,28 +949,7 @@
           </button>
         </div>
 
-        <div class="summary-grid">
-          <div class="summary-card">
-            <strong>Candidate</strong>
-            <span id="summaryName">-</span>
-          </div>
-          <div class="summary-card">
-            <strong>Job Role</strong>
-            <span id="summaryRole">-</span>
-          </div>
-          <div class="summary-card">
-            <strong>Email</strong>
-            <span id="summaryEmail">-</span>
-          </div>
-          <div class="summary-card">
-            <strong>Phone</strong>
-            <span id="summaryPhone">-</span>
-          </div>
-          <div class="summary-card">
-            <strong>Location</strong>
-            <span id="summaryLocation">-</span>
-          </div>
-        </div>
+
 
         <div class="structured-grid">
           <article class="panel">
@@ -1102,16 +1155,13 @@ No JSON response yet.</pre
       const experienceCount = document.getElementById("experienceCount");
       const certificationsCount = document.getElementById("certificationsCount");
       const projectsCount = document.getElementById("projectsCount");
-      const summaryName = document.getElementById("summaryName");
-      const summaryRole = document.getElementById("summaryRole");
-      const summaryEmail = document.getElementById("summaryEmail");
-      const summaryPhone = document.getElementById("summaryPhone");
-      const summaryLocation = document.getElementById("summaryLocation");
+
 
       const API_ENDPOINTS = getApiEndpoints();
 
       let selectedFile = null;
       let latestResult = null;
+      let selectedFileUrl = null;
 
       browseBtn.addEventListener("click", () => pdfInput.click());
       dropZone.addEventListener("click", () => pdfInput.click());
@@ -1194,6 +1244,21 @@ No JSON response yet.</pre
         downloadJsonBtn.disabled = true;
         results.classList.remove("visible");
         pageContainer.classList.remove("has-results");
+        pageContainer.classList.remove("has-file");
+
+        browseBtn.style.display = "";
+        dropZone.style.display = "";
+        parseBtn.style.display = "none";
+
+        // Clear PDF preview
+        const pdfViewer = document.getElementById("pdfViewer");
+        pdfViewer.src = "";
+        document.getElementById("pdfPreview").classList.remove("visible");
+        if (selectedFileUrl) {
+          URL.revokeObjectURL(selectedFileUrl);
+          selectedFileUrl = null;
+        }
+
         resetOutputs();
         setStatus("File removed. Choose another PDF when you are ready.", "");
       });
@@ -1262,6 +1327,21 @@ No JSON response yet.</pre
         downloadJsonBtn.disabled = true;
         results.classList.remove("visible");
         pageContainer.classList.remove("has-results");
+        pageContainer.classList.add("has-file");
+
+        browseBtn.style.display = "none";
+        dropZone.style.display = "none";
+        parseBtn.style.display = "block";
+
+        // Generate and set PDF Object URL
+        if (selectedFileUrl) {
+          URL.revokeObjectURL(selectedFileUrl);
+        }
+        selectedFileUrl = URL.createObjectURL(file);
+        const pdfViewer = document.getElementById("pdfViewer");
+        pdfViewer.src = selectedFileUrl;
+        document.getElementById("pdfPreview").classList.add("visible");
+
         resetOutputs();
         setStatus(
           "PDF selected. Click parse to run extraction, cleaning, and JSON conversion.",
@@ -1303,11 +1383,7 @@ No JSON response yet.</pre
         certificationsCount.textContent = meta.certifications_count || 0;
         projectsCount.textContent = meta.projects_count || 0;
 
-        summaryName.textContent = parsedData.full_name || "Not found";
-        summaryRole.textContent = parsedData.job_role || "Not found";
-        summaryEmail.textContent = parsedData.email || "Not found";
-        summaryPhone.textContent = parsedData.phone || "Not found";
-        summaryLocation.textContent = parsedData.location || "Not found";
+
 
         renderDetailList(
           candidateFields,
@@ -1401,11 +1477,7 @@ No JSON response yet.</pre
         certificationsCount.textContent = "0";
         projectsCount.textContent = "0";
 
-        summaryName.textContent = "-";
-        summaryRole.textContent = "-";
-        summaryEmail.textContent = "-";
-        summaryPhone.textContent = "-";
-        summaryLocation.textContent = "-";
+
 
         renderDetailList(candidateFields, [], "No candidate details found.");
         renderDetailList(profileFields, [], "No profile links found.");
