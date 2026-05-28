@@ -4,7 +4,7 @@ from functools import lru_cache
 from pathlib import Path
 from typing import Any, Dict
 
-from clean_resumes import clean_text
+from Data_cleaning.clean_resumes import clean_text
 from pipeline import (
     CertificationsExtractor,
     ExperienceExtractor,
@@ -26,7 +26,7 @@ class DependencyError(RuntimeError):
 
 def _ensure_pdf_dependencies() -> Any:
     try:
-        from dataset import extract_pdf_text
+        from Text_extraction.dataset import extract_pdf_text
     except ImportError as exc:
         raise DependencyError(
             "Missing PDF extraction dependency. Install `pymupdf` first."
