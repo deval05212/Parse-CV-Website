@@ -106,6 +106,22 @@ class ResumeAPIHandler(BaseHTTPRequestHandler):
             json_dir.mkdir(parents=True, exist_ok=True)
 
             file_stem = Path(filename).stem
+            counter = 1
+            unique_stem = file_stem
+            while (
+                (raw_dir / f"{unique_stem}.txt").exists() or
+                (cleaned_dir / f"{unique_stem}.txt").exists() or
+                (json_dir / f"{unique_stem}.json").exists()
+            ):
+                unique_stem = f"{file_stem} ({counter})"
+                counter += 1
+            file_stem = unique_stem
+
+            # Update the result filenames to match the stored unique name
+            ext = Path(filename).suffix
+            result["file_name"] = f"{file_stem}{ext}"
+            if "parsed_data" in result and isinstance(result["parsed_data"], dict):
+                result["parsed_data"]["file_name"] = f"{file_stem}{ext}"
 
             # 1. Store Raw Text
             (raw_dir / f"{file_stem}.txt").write_text(result.get("raw_text", ""), encoding="utf-8")
