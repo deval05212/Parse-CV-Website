@@ -470,6 +470,8 @@ def clean_text(text: str, lowercase: bool = False) -> str:
     # Remove repetitive single-character dividers
     text = re.sub(r"[\.\-]{5,}", " ", text)
     
+    # Normalize common non-ASCII dashes to ASCII hyphen first to preserve date ranges
+    text = re.sub(r'[\u2010-\u2015\u2212]', '-', text)
     # Remove emojis and special Unicode symbols
     text = re.sub(r'[^\x00-\x7f]', ' ', text)
     # Replace bullet markers with spaces to avoid merging words

@@ -722,7 +722,7 @@ class ExperienceExtractor:
         # 5. Match YYYY (e.g. 2022)
         m = re.match(r'^(\d{4})$', s)
         if m:
-            return f"{m.group(1)}-01"
+            return m.group(1)
             
         # Fallback: search for 4-digit year and month name
         m_year = re.search(r'\b(19|20)\d{2}\b', s)
@@ -731,7 +731,7 @@ class ExperienceExtractor:
             for month_name, month_num in MONTHS_MAP.items():
                 if month_name in s:
                     return f"{year}-{month_num}"
-            return f"{year}-01"
+            return year
             
         return s.title()
 

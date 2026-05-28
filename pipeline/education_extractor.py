@@ -113,7 +113,7 @@ def normalize_to_yyyy_mm(s: str) -> str:
     # 5. Match YYYY (e.g. 2022)
     m = re.match(r'^(\d{4})$', s)
     if m:
-        return f"{m.group(1)}-01"
+        return m.group(1)
         
     # Fallback: search for 4-digit year and month name
     m_year = re.search(r'\b(19|20)\d{2}\b', s)
@@ -122,7 +122,7 @@ def normalize_to_yyyy_mm(s: str) -> str:
         for month_name, month_num in MONTHS_MAP.items():
             if month_name in s:
                 return f"{year}-{month_num}"
-        return f"{year}-01"
+        return year
         
     return s.title()
 
@@ -883,11 +883,11 @@ def group_entities_refined(entities, section_text):
         schools = deg_to_schools[norm_deg]
         school_str = ", ".join(schools) if schools else ""
         start_d, end_d = deg_to_dates.get(norm_deg, ("", ""))
+        passing_y = end_d if end_d else start_d
         final_entries.append({
             "degree_or_board": norm_deg,
             "university_or_school": school_str,
-            "start_date": start_d,
-            "end_date": end_d
+            "passing_year": passing_y
         })
         
     return final_entries
