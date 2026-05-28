@@ -19,13 +19,14 @@ class ProjectsExtractor:
     ]
 
     NEXT_HEADERS = [
-        "education", "experience", "work experience", "professional experience",
-        "skills", "technical skills", "summary", "profile", "objective", "interests",
-        "languages", "hobbies", "declaration", "achievements", "awards", 
-        "positions of responsibility", "extra curricular", "extracurricular",
-        "certifications", "certification", "certificates", "certificate", "courses",
-        "projects", "project", "additional details", "additional info", "additional information",
-        "personal details", "personal information", "references", "key skills"
+        "education", "experience", "work experience", "professional experience", "employment", "history", "employment history",
+        "skills", "technical skills", "summary", "profile", "objective", "interests", "languages", "hobbies", "declaration",
+        "achievements", "awards", "positions of responsibility", "extra curricular", "extracurricular", "academic achievements",
+        "certifications", "certification", "certificates", "certificate", "courses", "projects", "project", "personal projects",
+        "academic projects", "key projects", "recent projects", "additional details", "additional info", "additional information",
+        "personal details", "personal information", "personal data", "personal profile", "personality", "references", "key skills",
+        "internships", "jobs", "internships/ jobs", "internship", "professional summary", "career objective", "co-curricular activities",
+        "co-curricular", "extra-curricular achievements", "academics", "academic qualification", "academic qualifications"
     ]
 
     ACTION_VERBS = {
@@ -92,12 +93,112 @@ class ProjectsExtractor:
     )
 
     KEY_VALUE_RE = re.compile(
-        r'^(?i)\s*(?:type|backend|frontend|database|tech\s*stack|technologies|tools|libraries|environment|key\s*concept|concept|link|github|role|duration|date)\s*:'
+        r'^(?i)\s*(?:type|backend|frontend|database|tech\s*stack|technologies|tools|libraries|environment|key\s*concept|concept|link|github|role|duration|date|'
+        r'version\s*control|responsibilities|description|technologies\s*used|languages\s*and\s*frameworks|ui\s*and\s*styling|database|design\s*tools|'
+        r'state\s*management\s*and\s*apis|frameworks\s*and\s*libraries|developer\s*tools|apis\s*and\s*data\s*handling|devops\s*and\s*deployment|'
+        r'build\s*tools|programming\s*languages|frontend\s*technologies|backend\s*technologies|databases\s*and\s*storage|'
+        r'development\s*tools\s*and\s*platforms|others|application\s*link|source\s*code|hosted\s*link|deployment\s*link|'
+        r'play\s*store\s*link|github\s*link|live\s*link|project\s*link|website\s*link|code\s*link|demo\s*link|live\s*website|'
+        r'github\s*repo|github\s*repository|git\s*repo|live\s*demo|view\s*demo|link\s*to|project\s*code|technology\s*used)\s*:'
     )
+
+    NON_TITLE_START_WORDS = {
+        "using", "with", "developed", "built", "implemented", "designed", "created", 
+        "integrated", "managed", "optimized", "maintained", "engineered", "architected", 
+        "deployed", "from", "by", "to", "for", "on", "at", "in", "and", "or", "the", 
+        "an", "a", "is", "are", "was", "were", "has", "have", "had", "as", "our", 
+        "their", "this", "these", "those", "that", "which", "who", "whom", "whose", 
+        "it", "its", "they", "them", "we", "us", "he", "she", "his", "her", "my", 
+        "your", "soon", "heading", "developing", "building", "implementing", "achieving", 
+        "collaborated", "assisted", "provided", "spearheaded", "headed", "supervised", "ongoing"
+    }
+
+    CONTINUATION_WORDS = {
+        "and", "or", "with", "using", "for", "to", "in", "on", "at", "by", "of", "the", 
+        "a", "an", "is", "are", "from", "implemented", "which", "that", "built", "developed",
+        "engineered", "designed", "created", "integrated", "managed", "optimized"
+    }
 
     def __init__(self, model=None):
         self.model = model
         self.ALL_TECH_KEYWORDS = TECH_KEYWORDS.union(self.ADDITIONAL_TECH)
+
+    def deduplicate_title_words(self, title: str) -> str:
+        title = title.strip()
+        if not title:
+            return ""
+        
+        words = title.split()
+        if not words:
+            return title
+            
+        n = len(words)
+        if n % 2 == 0:
+            half = n // 2
+            if words[:half] == words[half:]:
+                return " ".join(words[:half])
+                
+        length = len(title)
+        for i in range(1, length // 2 + 1):
+            if length % i == 0:
+                sub = title[:i]
+                if sub * (length // i) == title:
+                    if len(sub.strip()) >= 3:
+                        return sub.strip()
+                        
+        i = 0
+        new_words = []
+        while i < n:
+            matched = False
+            for sz in range(n // 2, 0, -1):
+                if i + 2 * sz <= n:
+                    chunk1 = words[i : i + sz]
+                    chunk2 = words[i + sz : i + 2 * sz]
+                    if chunk1 == chunk2:
+                        new_words.extend(chunk1)
+                        i += 2 * sz
+                        matched = True
+                        break
+            if not matched:
+                new_words.append(words[i])
+                i += 1
+                
+        return " ".join(new_words)
+
+    def is_junk_project_title(self, text: str) -> bool:
+        cleaned = text.lower().strip(" \t\n\r.,;:-|/()[]{}*•⚫■★_")
+        if not cleaned:
+            return True
+            
+        junk_words = {
+            "live", "github", "link", "links", "demo", "code", "website", "project", 
+            "projects", "url", "video", "repo", "repository", "view", "visit", 
+            "deployment", "hosted", "site", "url", "urls", "github:https"
+        }
+        if cleaned in junk_words:
+            return True
+            
+        junk_phrases = {
+            "live link", "github link", "view project", "project link", "website link", 
+            "code link", "demo link", "live website", "github repo", "github repository", 
+            "git repo", "source code", "live demo", "view demo", "link to", "project code", 
+            "hosted link", "deployment link", "play store link", "app link", "site link", 
+            "web link", "live url", "github url", "github reference", "repository link", 
+            "repo link", "online link", "interactive demo", "video demo", "demo url", 
+            "live site", "github repos", "github homepage", "project homepage",
+            "personal project", "academic project", "mini project", "major project",
+            "portfolio website", "portfolio", "key project", "recent project",
+            "version control"
+        }
+        if cleaned in junk_phrases or cleaned.startswith("github:"):
+            return True
+            
+        if len(cleaned) <= 25:
+            for word in ["link", "demo", "repo", "github", "website", "code", "url", "live", "hosted", "view", "visit"]:
+                if word in cleaned:
+                    return True
+                    
+        return False
 
     def strip_punctuation(self, text: str) -> str:
         cleaned = text.strip(" \t\n\r.,;:-|/&*•⚫■★")
@@ -342,6 +443,10 @@ class ProjectsExtractor:
             
             first_word = line_clean.split()[0].lower().strip(".,;:()") if line_clean.split() else ""
             is_action_verb = first_word in self.ACTION_VERBS
+            starts_with_non_title_word = first_word in self.NON_TITLE_START_WORDS
+            
+            last_word_in_line = line_clean.split()[-1].lower().strip(".:;!?()[]{}") if line_clean.split() else ""
+            ends_with_continuation = last_word_in_line in self.CONTINUATION_WORDS or line_clean.endswith(",")
             
             is_link = line_clean.lower().startswith(("link:", "github:", "http://", "https://", "live:"))
             is_tech_stack_indicator = line_clean.lower().startswith(("tech stack:", "technologies:", "tools used:", "environment:", "libraries:"))
@@ -369,7 +474,9 @@ class ProjectsExtractor:
                 not prev_line_continued and
                 not is_bullet and 
                 not ends_with_period and 
+                not ends_with_continuation and
                 not is_action_verb and 
+                not starts_with_non_title_word and
                 not is_link and 
                 not is_tech_stack_indicator and 
                 not is_key_value and 
@@ -377,7 +484,7 @@ class ProjectsExtractor:
                 not is_mostly_tech and 
                 starts_with_cap and 
                 len(cleaned_title_temp) < 80 and 
-                cleaned_title_temp.lower().strip(" \t\n\r.,;:-|/()[]{}*•⚫■★") not in self.JUNK_PROJECT_TITLES
+                not self.is_junk_project_title(cleaned_title_temp)
             )
             
             if is_title:
@@ -432,6 +539,7 @@ class ProjectsExtractor:
             projects.append(current_proj)
             
         valid_projects = []
+        seen_titles = {}
         for p in projects:
             name = self.strip_punctuation(p["project_name"])
             if name and name.lower() not in {"project", "projects"} and len(name) > 3:
@@ -441,6 +549,10 @@ class ProjectsExtractor:
                 
                 cleaned_title = self.balance_parens(self.strip_punctuation(cleaned_title))
                 if not cleaned_title or cleaned_title.lower() in {"project", "projects"}:
+                    continue
+                
+                cleaned_title = self.deduplicate_title_words(cleaned_title)
+                if self.is_junk_project_title(cleaned_title):
                     continue
                 
                 all_techs = p["technologies"] + trailing_techs
@@ -468,10 +580,23 @@ class ProjectsExtractor:
                 if not cleaned_desc and not dedup_techs:
                     continue
                     
-                valid_projects.append({
-                    "project_name": cleaned_title,
-                    "technologies": dedup_techs,
-                    "description": cleaned_desc
-                })
+                if cleaned_title in seen_titles:
+                    existing_proj = seen_titles[cleaned_title]
+                    if cleaned_desc:
+                        if existing_proj["description"]:
+                            existing_proj["description"] += " " + cleaned_desc
+                        else:
+                            existing_proj["description"] = cleaned_desc
+                    for t in dedup_techs:
+                        if t not in existing_proj["technologies"]:
+                            existing_proj["technologies"].append(t)
+                else:
+                    new_proj = {
+                        "project_name": cleaned_title,
+                        "technologies": dedup_techs,
+                        "description": cleaned_desc
+                    }
+                    seen_titles[cleaned_title] = new_proj
+                    valid_projects.append(new_proj)
                 
         return valid_projects
