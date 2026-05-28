@@ -12,7 +12,8 @@ from resume_parser_service import DependencyError, parse_resume_bytes
 
 BASE_DIR = Path(__file__).resolve().parent
 HOME_PAGE = BASE_DIR / "home.html"
-DEFAULT_HOST = "0.0.0.0"
+STORED_DATA_DIR = BASE_DIR / "stored_data"
+DEFAULT_HOST = "192.168.0.251"
 DEFAULT_PORT = 5200
 
 
@@ -93,6 +94,31 @@ class ResumeAPIHandler(BaseHTTPRequestHandler):
                 status=HTTPStatus.INTERNAL_SERVER_ERROR,
             )
             return
+
+        # Store raw text, cleaned text, and parsed JSON locally
+        try:
+            raw_dir = STORED_DATA_DIR / "raw_text"
+            cleaned_dir = STORED_DATA_DIR / "cleaned_text"
+            json_dir = STORED_DATA_DIR / "parsed_json"
+
+            raw_dir.mkdir(parents=True, exist_ok=True)
+            cleaned_dir.mkdir(parents=True, exist_ok=True)
+            json_dir.mkdir(parents=True, exist_ok=True)
+
+            file_stem = Path(filename).stem
+
+            # 1. Store Raw Text
+            (raw_dir / f"{file_stem}.txt").write_text(result.get("raw_text", ""), encoding="utf-8")
+
+            # 2. Store Cleaned Text
+            (cleaned_dir / f"{file_stem}.txt").write_text(result.get("cleaned_text", ""), encoding="utf-8")
+
+            # 3. Store Parsed JSON
+            parsed_data = result.get("parsed_data", {})
+            json_content = json.dumps(parsed_data, indent=2, ensure_ascii=False)
+            (json_dir / f"{file_stem}.json").write_text(json_content, encoding="utf-8")
+        except Exception as exc:
+            print(f"Warning: Failed to save extracted data locally: {exc}")
 
         self._send_json({"status": "success", **result})
 

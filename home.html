@@ -761,9 +761,184 @@
           flex-direction: column;
         }
       }
+
+      /* Disclaimer Modal Styles */
+      .disclaimer-overlay {
+        position: fixed;
+        inset: 0;
+        background: rgba(3, 7, 18, 0.75);
+        backdrop-filter: blur(16px);
+        z-index: 99999;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        opacity: 0;
+        visibility: hidden;
+        transition: opacity 0.4s cubic-bezier(0.16, 1, 0.3, 1), visibility 0.4s cubic-bezier(0.16, 1, 0.3, 1);
+      }
+
+      .disclaimer-overlay.show {
+        opacity: 1;
+        visibility: visible;
+      }
+
+      .disclaimer-modal {
+        background: var(--panel);
+        border: 1px solid rgba(245, 158, 11, 0.35);
+        border-radius: 28px;
+        padding: 36px 32px;
+        max-width: 480px;
+        width: min(480px, calc(100% - 32px));
+        box-shadow: 0 40px 100px rgba(0, 0, 0, 0.6);
+        text-align: center;
+        transform: scale(0.9);
+        transition: transform 0.4s cubic-bezier(0.16, 1, 0.3, 1);
+      }
+
+      .disclaimer-overlay.show .disclaimer-modal {
+        transform: scale(1);
+      }
+
+      .disclaimer-icon-wrapper {
+        width: 64px;
+        height: 64px;
+        border-radius: 50%;
+        background: rgba(245, 158, 11, 0.12);
+        display: grid;
+        place-items: center;
+        margin: 0 auto 20px;
+      }
+
+      .disclaimer-icon {
+        width: 32px;
+        height: 32px;
+        color: var(--warm);
+      }
+
+      .disclaimer-modal h2 {
+        font-size: 1.8rem;
+        margin-bottom: 12px;
+        color: var(--text);
+      }
+
+      .disclaimer-text {
+        font-size: 1.02rem;
+        line-height: 1.65;
+        color: var(--muted);
+        margin: 0 0 28px;
+      }
+
+      .disclaimer-btn {
+        width: 100%;
+        padding: 14px 24px;
+        border-radius: 16px;
+        font-size: 1.05rem;
+        font-weight: 700;
+        background: var(--warm);
+        color: #04111f;
+        border: none;
+        cursor: pointer;
+        transition: transform 0.15s ease, background 0.15s ease, box-shadow 0.15s ease;
+      }
+
+      .disclaimer-btn:hover {
+        transform: translateY(-2px);
+        background: #f59e0b;
+        box-shadow: 0 8px 24px rgba(245, 158, 11, 0.25);
+      }
+
+      .disclaimer-btn:active {
+        transform: translateY(0);
+      }
+
+      .disclaimer-btn:disabled {
+        opacity: 0.55;
+        cursor: not-allowed;
+        transform: none !important;
+        box-shadow: none !important;
+        background: rgba(151, 171, 201, 0.2);
+        color: var(--muted);
+        border: 1px solid rgba(151, 171, 201, 0.1);
+      }
+
+      .disclaimer-checkbox-wrapper {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: 12px;
+        margin: 0 auto 28px;
+        text-align: left;
+        max-width: 400px;
+      }
+
+      .disclaimer-checkbox {
+        appearance: none;
+        -webkit-appearance: none;
+        width: 20px;
+        height: 20px;
+        border: 2px solid rgba(151, 171, 201, 0.4);
+        border-radius: 6px;
+        outline: none;
+        background-color: transparent;
+        cursor: pointer;
+        display: inline-grid;
+        place-content: center;
+        transition: border-color 0.2s ease, background-color 0.2s ease;
+        flex-shrink: 0;
+      }
+
+      .disclaimer-checkbox:checked {
+        border-color: var(--warm);
+        background-color: rgba(245, 158, 11, 0.2);
+      }
+
+      .disclaimer-checkbox:checked::before {
+        content: "";
+        width: 10px;
+        height: 10px;
+        clip-path: polygon(14% 44%, 0 65%, 50% 100%, 100% 16%, 80% 0%, 43% 62%);
+        background-color: var(--warm);
+      }
+
+      .disclaimer-checkbox-label {
+        font-size: 0.94rem;
+        color: var(--muted);
+        cursor: pointer;
+        user-select: none;
+        line-height: 1.4;
+      }
+
+      .disclaimer-checkbox:focus-visible {
+        outline: 2px solid var(--warm);
+        outline-offset: 2px;
+      }
     </style>
   </head>
   <body>
+    <!-- Disclaimer Modal Overlay -->
+    <div id="disclaimerOverlay" class="disclaimer-overlay">
+      <div class="disclaimer-modal">
+        <div class="disclaimer-icon-wrapper">
+          <svg class="disclaimer-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+          </svg>
+        </div>
+        <h2>Attention: System Disclaimer</h2>
+        <p class="disclaimer-text">
+          Please note that the resume parsing pipeline cannot extract all details with 100% accuracy. Because this system was originally developed by an intern, some complex layouts or special formatting styles might not be fully parsed.
+        </p>
+        <div class="disclaimer-checkbox-wrapper">
+          <input type="checkbox" id="disclaimerCheckbox" class="disclaimer-checkbox" />
+          <label for="disclaimerCheckbox" class="disclaimer-checkbox-label">
+            I acknowledge these limitations and wish to proceed
+          </label>
+        </div>
+        <button id="closeDisclaimerBtn" class="disclaimer-btn" disabled>
+          I Understand & Proceed
+        </button>
+      </div>
+    </div>
+
     <main class="page">
       <section class="hero">
         <article class="card hero-copy">
@@ -1963,6 +2138,34 @@ No JSON response yet.</pre
         if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(2)} KB`;
         return `${(bytes / (1024 * 1024)).toFixed(2)} MB`;
       }
+
+      // Disclaimer modal functionality
+      const disclaimerOverlay = document.getElementById("disclaimerOverlay");
+      const closeDisclaimerBtn = document.getElementById("closeDisclaimerBtn");
+      const disclaimerCheckbox = document.getElementById("disclaimerCheckbox");
+
+      // Show disclaimer on page load (if not dismissed in this session)
+      if (!sessionStorage.getItem("disclaimerAccepted")) {
+        // Small delay for smooth fade-in transitions
+        setTimeout(() => {
+          disclaimerOverlay.classList.add("show");
+        }, 300);
+      }
+
+      // Checkbox state change listener
+      if (disclaimerCheckbox && closeDisclaimerBtn) {
+        disclaimerCheckbox.addEventListener("change", (e) => {
+          closeDisclaimerBtn.disabled = !e.target.checked;
+        });
+      }
+
+      closeDisclaimerBtn.addEventListener("click", () => {
+        if (disclaimerCheckbox && !disclaimerCheckbox.checked) {
+          return;
+        }
+        disclaimerOverlay.classList.remove("show");
+        sessionStorage.setItem("disclaimerAccepted", "true");
+      });
     </script>
   </body>
 </html>
